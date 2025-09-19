@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: searchku_postgres
+    environment:
+      POSTGRES_DB: searchku
+      POSTGRES_USER: searchku_user
+      POSTGRES_PASSWORD: searchku_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U searchku_user -d searchku"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - searchku_network
+
+  # FastAPI backend service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: searchku_backend
+    environment:
+      DATABASE_URL: postgresql://searchku_user:searchku_password@postgres:5432/searchku
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - searchku_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # React frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: searchku_frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - searchku_network
+    command: npm run dev -- --host 0.0.0.0 --port 3000
+
+volumes:
+  postgres_data:
+  backend_uploads:
+
+networks:
+  searchku_network:
+    driver: bridge
