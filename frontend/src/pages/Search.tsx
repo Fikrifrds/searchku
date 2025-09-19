@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search as SearchIcon, Filter, X, Book, Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { Search as SearchIcon, Filter, X, Book } from 'lucide-react';
 import { useBookStore } from '../lib/store';
 import { apiClient } from '../lib/api';
 import { cn } from '../lib/utils';
@@ -29,15 +29,6 @@ export default function Search() {
   const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [searchType, setSearchType] = useState<'semantic' | 'text'>('semantic');
   const [isSearching, setIsSearching] = useState(false);
-  
-  // File upload states
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [uploadBookId, setUploadBookId] = useState<number | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
-  const [uploadErrors, setUploadErrors] = useState<{[key: string]: string}>({});
-  const [uploadSuccess, setUploadSuccess] = useState<string[]>([]);
-  const [isDragOver, setIsDragOver] = useState(false);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -83,83 +74,6 @@ export default function Search() {
     setSearchResults([]);
   };
 
-  // File upload handlers
-  const handleFileSelect = (files: FileList | null) => {
-    if (!files) return;
-    
-    const validFiles = Array.from(files).filter(file => {
-      const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
-      return validTypes.includes(file.type) || file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.doc') || file.name.toLowerCase().endsWith('.docx') || file.name.toLowerCase().endsWith('.txt');
-    });
-    
-    setSelectedFiles(prev => [...prev, ...validFiles]);
-    setUploadErrors({});
-    setUploadSuccess([]);
-  };
-
-  const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    handleFileSelect(e.dataTransfer.files);
-  };
-
-  const uploadFiles = async () => {
-    if (!uploadBookId || selectedFiles.length === 0) return;
-    
-    setIsUploading(true);
-    setUploadProgress({});
-    setUploadErrors({});
-    setUploadSuccess([]);
-    
-    const formData = new FormData();
-    selectedFiles.forEach(file => {
-      formData.append('files', file);
-    });
-    
-    try {
-      const response = await fetch(`http://localhost:8001/api/books/${uploadBookId}/upload-files`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-      
-      const result = await response.json();
-      setUploadSuccess(selectedFiles.map(f => f.name));
-      setSelectedFiles([]);
-      setUploadBookId(null);
-      
-      // Refresh books list
-      await fetchBooks();
-    } catch (error) {
-      console.error('Upload failed:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Upload failed';
-      const errors: {[key: string]: string} = {};
-      selectedFiles.forEach(file => {
-        errors[file.name] = errorMsg;
-      });
-      setUploadErrors(errors);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -170,148 +84,6 @@ export default function Search() {
         </p>
       </div>
 
-      {/* File Upload Section */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">Upload Files</h2>
-        
-        {/* Book Selection for Upload */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Book to Upload Files To:
-          </label>
-          <select
-            value={uploadBookId || ''}
-            onChange={(e) => setUploadBookId(e.target.value ? Number(e.target.value) : null)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="">Choose a book...</option>
-            {books.map((book) => (
-              <option key={book.id} value={book.id}>
-                {book.title} - {book.author}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Drag and Drop Area */}
-        <div
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={cn(
-            'border-2 border-dashed rounded-lg p-8 text-center transition-colors',
-            isDragOver
-              ? 'border-blue-400 bg-blue-50'
-              : 'border-gray-300 hover:border-gray-400'
-          )}
-        >
-          <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <div className="space-y-2">
-            <p className="text-lg font-medium text-gray-900">
-              Drop files here or click to browse
-            </p>
-            <p className="text-sm text-gray-500">
-              Supports PDF, DOC, DOCX, and TXT files
-            </p>
-          </div>
-          <input
-            type="file"
-            multiple
-            accept=".pdf,.doc,.docx,.txt"
-            onChange={(e) => handleFileSelect(e.target.files)}
-            className="hidden"
-            id="file-upload"
-          />
-          <label
-            htmlFor="file-upload"
-            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 cursor-pointer"
-          >
-            Choose Files
-          </label>
-        </div>
-
-        {/* Selected Files */}
-        {selectedFiles.length > 0 && (
-          <div className="mt-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">
-              Selected Files ({selectedFiles.length})
-            </h3>
-            <div className="space-y-2">
-              {selectedFiles.map((file, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                  <div className="flex items-center space-x-3">
-                    <FileText className="w-5 h-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{file.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {(file.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {uploadSuccess.includes(file.name) && (
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                    )}
-                    {uploadErrors[file.name] && (
-                      <AlertCircle className="w-5 h-5 text-red-500" />
-                    )}
-                    {!isUploading && (
-                      <button
-                        onClick={() => removeFile(index)}
-                        className="p-1 text-gray-400 hover:text-gray-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Upload Errors */}
-        {Object.keys(uploadErrors).length > 0 && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
-            <h4 className="text-sm font-medium text-red-800 mb-2">Upload Errors:</h4>
-            <ul className="text-sm text-red-700 space-y-1">
-              {Object.entries(uploadErrors).map(([filename, error]) => (
-                <li key={filename}>
-                  <strong>{filename}:</strong> {error}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Upload Success */}
-        {uploadSuccess.length > 0 && (
-          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
-            <h4 className="text-sm font-medium text-green-800 mb-2">Successfully Uploaded:</h4>
-            <ul className="text-sm text-green-700 space-y-1">
-              {uploadSuccess.map((filename) => (
-                <li key={filename}>{filename}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Upload Button */}
-        <div className="mt-4 flex justify-end">
-          <button
-            onClick={uploadFiles}
-            disabled={!uploadBookId || selectedFiles.length === 0 || isUploading}
-            className={cn(
-              'px-6 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2',
-              uploadBookId && selectedFiles.length > 0 && !isUploading
-                ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            )}
-          >
-            {isUploading ? 'Uploading...' : `Upload ${selectedFiles.length} File${selectedFiles.length !== 1 ? 's' : ''}`}
-          </button>
-        </div>
-      </div>
 
       {/* Search Interface */}
       <div className="bg-white shadow rounded-lg p-6">

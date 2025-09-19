@@ -2,7 +2,7 @@
 
 Product Name: Digital Book Processing & Translation System
 Version: v1.0
-Owner: lcdt
+Owner: Fikri Firdaus
 Date: Sept 2025
 
 1. Overview

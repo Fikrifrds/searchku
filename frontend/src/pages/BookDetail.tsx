@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit, Trash2, BookOpen, FileText, Upload } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { useBookStore, usePageStore } from '../lib/store';
 import { Book, Page } from '../lib/api';
 import { cn } from '../lib/utils';
@@ -14,6 +14,14 @@ export default function BookDetail() {
   
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [showFileUploadForm, setShowFileUploadForm] = useState(false);
+  
+  // File upload states
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadErrors, setUploadErrors] = useState<{[key: string]: string}>({});
+  const [uploadSuccess, setUploadSuccess] = useState<string[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
   
   const book = books.find(b => b.id === bookId);
   const bookPages = pages.filter(p => p.book_id === bookId);
@@ -28,6 +36,81 @@ export default function BookDetail() {
   const handleDeletePage = async (pageNumber: number) => {
     if (window.confirm('Are you sure you want to delete this page?')) {
       await deletePage(bookId, pageNumber);
+    }
+  };
+
+  // File upload handlers
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files) return;
+    
+    const validFiles = Array.from(files).filter(file => {
+      const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+      return validTypes.includes(file.type) || file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.doc') || file.name.toLowerCase().endsWith('.docx') || file.name.toLowerCase().endsWith('.txt');
+    });
+    
+    setSelectedFiles(prev => [...prev, ...validFiles]);
+    setUploadErrors({});
+    setUploadSuccess([]);
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    handleFileSelect(e.dataTransfer.files);
+  };
+
+  const uploadFiles = async () => {
+    if (selectedFiles.length === 0) return;
+    
+    setIsUploading(true);
+    setUploadErrors({});
+    setUploadSuccess([]);
+    
+    const formData = new FormData();
+    selectedFiles.forEach(file => {
+      formData.append('files', file);
+    });
+    
+    try {
+      const response = await fetch(`http://localhost:8001/api/books/${bookId}/upload-files`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+      
+      const result = await response.json();
+      setUploadSuccess(selectedFiles.map(f => f.name));
+      setSelectedFiles([]);
+      
+      // Refresh pages list
+      await fetchPages(bookId);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Upload failed';
+      const errors: {[key: string]: string} = {};
+      selectedFiles.forEach(file => {
+        errors[file.name] = errorMsg;
+      });
+      setUploadErrors(errors);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -78,6 +161,13 @@ export default function BookDetail() {
           >
             <Upload className="w-4 h-4 mr-2" />
             Upload Cover
+          </button>
+          <button
+            onClick={() => setShowFileUploadForm(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <FileText className="w-4 h-4" />
+            Upload Files
           </button>
           <button
             onClick={() => setShowCreateForm(true)}
@@ -182,6 +272,147 @@ export default function BookDetail() {
           bookId={bookId}
           onClose={() => setShowUploadForm(false)}
         />
+      )}
+
+      {/* File Upload Modal */}
+      {showFileUploadForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Upload Files to {book?.title}</h2>
+              <button
+                onClick={() => setShowFileUploadForm(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Drag and Drop Area */}
+            <div
+              className={cn(
+                "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
+                isDragOver ? "border-blue-500 bg-blue-50" : "border-gray-300"
+              )}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-lg font-medium text-gray-700 mb-2">
+                Drag and drop files here, or click to select
+              </p>
+              <p className="text-sm text-gray-500 mb-4">
+                Supported formats: PDF, DOC, DOCX, TXT
+              </p>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                onChange={(e) => handleFileSelect(e.target.files)}
+                className="hidden"
+                id="file-upload"
+              />
+              <label
+                htmlFor="file-upload"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 cursor-pointer"
+              >
+                Select Files
+              </label>
+            </div>
+
+            {/* Selected Files */}
+            {selectedFiles.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-medium mb-3">Selected Files ({selectedFiles.length})</h3>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {selectedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-blue-600" />
+                        <div>
+                          <p className="font-medium text-sm">{file.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeFile(index)}
+                        className="text-red-500 hover:text-red-700"
+                        disabled={isUploading}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload Errors */}
+            {Object.keys(uploadErrors).length > 0 && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                  <h4 className="font-medium text-red-800">Upload Errors</h4>
+                </div>
+                <div className="space-y-1">
+                  {Object.entries(uploadErrors).map(([filename, error]) => (
+                    <p key={filename} className="text-sm text-red-700">
+                      <span className="font-medium">{filename}:</span> {error}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload Success */}
+            {uploadSuccess.length > 0 && (
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <h4 className="font-medium text-green-800">Successfully Uploaded</h4>
+                </div>
+                <div className="space-y-1">
+                  {uploadSuccess.map((filename) => (
+                    <p key={filename} className="text-sm text-green-700">
+                      {filename}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload Button */}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowFileUploadForm(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                disabled={isUploading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={uploadFiles}
+                disabled={selectedFiles.length === 0 || isUploading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                {isUploading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    Upload Files
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
