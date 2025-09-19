@@ -21,9 +21,10 @@ CREATE TABLE IF NOT EXISTS pages (
     book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     page_number INTEGER NOT NULL,
     original_text TEXT NOT NULL,
-    translated_text TEXT,
-    embedding_vector vector(1536), -- OpenAI text-embedding-ada-002 dimension
-    embedding_model VARCHAR(100),
+    en_translation TEXT,
+    id_translation TEXT,
+    embedding_vector vector(1536), -- OpenAI text-embedding-3-small dimension
+    embedding_model VARCHAR(100) NOT NULL DEFAULT 'text-embedding-3-small',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(book_id, page_number)
@@ -35,9 +36,9 @@ CREATE INDEX IF NOT EXISTS idx_pages_page_number ON pages(page_number);
 CREATE INDEX IF NOT EXISTS idx_books_title ON books(title);
 CREATE INDEX IF NOT EXISTS idx_books_author ON books(author);
 
--- Create vector similarity index for semantic search
+-- Create vector similarity index for semantic search using HNSW for better performance
 CREATE INDEX IF NOT EXISTS idx_pages_embedding_vector ON pages 
-USING ivfflat (embedding_vector vector_cosine_ops) WITH (lists = 100);
+USING hnsw (embedding_vector vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

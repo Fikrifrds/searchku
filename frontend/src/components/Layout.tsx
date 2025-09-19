@@ -10,7 +10,6 @@ const navigation = [
   { name: 'Home', href: '/', icon: Home },
   { name: 'Books', href: '/books', icon: Book },
   { name: 'Search', href: '/search', icon: Search },
-  { name: 'Upload', href: '/upload', icon: Upload },
 ];
 
 export default function Layout({ children }: LayoutProps) {

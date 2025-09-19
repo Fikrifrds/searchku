@@ -219,13 +219,14 @@ function CreateBookModal({ onClose }: CreateBookModalProps) {
                 onChange={(e) => setFormData({ ...formData, language: e.target.value })}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               >
+                <option value="ar">Arabic</option>
+                <option value="zh">Chinese</option>
                 <option value="en">English</option>
-                <option value="id">Indonesian</option>
-                <option value="es">Spanish</option>
                 <option value="fr">French</option>
                 <option value="de">German</option>
-                <option value="zh">Chinese</option>
+                <option value="id">Indonesian</option>
                 <option value="ja">Japanese</option>
+                <option value="es">Spanish</option>
               </select>
             </div>
             <div>

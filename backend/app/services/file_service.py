@@ -7,6 +7,8 @@ from pathlib import Path
 import logging
 from PIL import Image
 import io
+from PyPDF2 import PdfReader
+from docx import Document
 
 logger = logging.getLogger(__name__)
 
@@ -133,27 +135,90 @@ class FileService:
             return ""
         return f"{base_url.rstrip('/')}/{file_path}"
     
-    async def process_bulk_text_upload(self, file: UploadFile) -> list:
+    async def _extract_text_from_file(self, content: bytes, content_type: str, filename: str) -> str:
         """
-        Process bulk text upload for pages.
+        Extract text from different file types.
         
         Args:
-            file: The uploaded text file
+            content: The file content as bytes
+            content_type: The MIME type of the file
+            filename: The original filename
             
         Returns:
-            List of page texts
+            Extracted text content
         """
         try:
-            # Validate file type
-            if not file.content_type.startswith("text/"):
+            if content_type.startswith("text/"):
+                # Handle text files
+                try:
+                    return content.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        return content.decode('utf-8-sig')  # Try with BOM
+                    except UnicodeDecodeError:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="File must be UTF-8 encoded"
+                        )
+            
+            elif content_type == "application/pdf":
+                # Handle PDF files
+                try:
+                    pdf_reader = PdfReader(io.BytesIO(content))
+                    text_content = ""
+                    for page in pdf_reader.pages:
+                        text_content += page.extract_text() + "\n\n\n"
+                    return text_content.strip()
+                except Exception as e:
+                    logger.error(f"Error extracting text from PDF: {str(e)}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Failed to extract text from PDF file"
+                    )
+            
+            elif content_type in ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"]:
+                # Handle Word documents
+                try:
+                    doc = Document(io.BytesIO(content))
+                    text_content = ""
+                    for paragraph in doc.paragraphs:
+                        if paragraph.text.strip():
+                            text_content += paragraph.text + "\n"
+                    return text_content.strip()
+                except Exception as e:
+                    logger.error(f"Error extracting text from Word document: {str(e)}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Failed to extract text from Word document"
+                    )
+            
+            else:
                 raise HTTPException(
                     status_code=400,
-                    detail="File must be a text file"
+                    detail="Unsupported file type"
                 )
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error extracting text from file {filename}: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to extract text from file"
+            )
+    
+    async def process_bulk_text_upload(self, content: bytes, filename: str) -> list:
+        """
+        Process bulk text upload for pages. Supports .txt, .md, .pdf, .doc, and .docx files.
+        
+        Args:
+            content: The file content as bytes
+            filename: The original filename
             
-            # Read file content
-            content = await file.read()
-            
+        Returns:
+            List of page data dictionaries with 'text' key
+        """
+        try:
             # Validate file size
             if len(content) > self.max_file_size:
                 raise HTTPException(
@@ -161,28 +226,21 @@ class FileService:
                     detail=f"File too large. Maximum size: {self.max_file_size // (1024*1024)}MB"
                 )
             
-            # Decode content
-            try:
-                text_content = content.decode('utf-8')
-            except UnicodeDecodeError:
-                try:
-                    text_content = content.decode('utf-8-sig')  # Try with BOM
-                except UnicodeDecodeError:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="File must be UTF-8 encoded"
-                    )
+            # Determine content type from filename
+            content_type = self._get_content_type_from_filename(filename)
             
-            # Split into pages (assuming pages are separated by double newlines or page breaks)
+            # Extract text based on file type
+            text_content = await self._extract_text_from_file(content, content_type, filename)
+            
+            # Split into pages (assuming pages are separated by triple newlines or page breaks)
             pages = []
             page_texts = text_content.split('\n\n\n')  # Triple newline as page separator
             
-            for i, page_text in enumerate(page_texts, 1):
+            for page_text in page_texts:
                 cleaned_text = page_text.strip()
                 if cleaned_text:  # Only add non-empty pages
                     pages.append({
-                        'page_number': i,
-                        'original_text': cleaned_text
+                        'text': cleaned_text
                     })
             
             return pages
@@ -193,8 +251,30 @@ class FileService:
             logger.error(f"Error processing bulk text upload: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail="Failed to process text file"
+                detail="Failed to process file"
             )
+    
+    def _get_content_type_from_filename(self, filename: str) -> str:
+        """
+        Determine content type from filename extension.
+        
+        Args:
+            filename: The filename
+            
+        Returns:
+            MIME content type
+        """
+        extension = filename.lower().split('.')[-1] if '.' in filename else ''
+        
+        content_types = {
+            'txt': 'text/plain',
+            'md': 'text/markdown',
+            'pdf': 'application/pdf',
+            'doc': 'application/msword',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+        
+        return content_types.get(extension, 'text/plain')
 
 # Global instance
 file_service = FileService()

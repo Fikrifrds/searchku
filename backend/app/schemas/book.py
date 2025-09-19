@@ -6,6 +6,8 @@ class BookBase(BaseModel):
     title: str
     author: Optional[str] = None
     language: str = "ar"
+    description: Optional[str] = None
+    cover_image_url: Optional[str] = None
 
 class BookCreate(BookBase):
     pass

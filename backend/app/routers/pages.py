@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
@@ -6,6 +6,8 @@ from ..models.page import Page
 from ..models.book import Book
 from ..schemas.page import PageCreate, PageResponse, PageUpdate
 from ..services.embedding_service import embedding_service
+from ..services.file_service import file_service
+import json
 
 router = APIRouter()
 
@@ -153,3 +155,97 @@ async def delete_page(
     db.delete(page)
     db.commit()
     return {"message": "Page deleted successfully"}
+
+@router.post("/books/{book_id}/upload-files")
+async def upload_files_bulk(
+    book_id: int,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db)
+):
+    """Upload and process multiple files (PDF, DOC, DOCX) for a book.
+    
+    This endpoint:
+    1. Validates the book exists
+    2. Processes each uploaded file to extract text
+    3. Splits content into pages
+    4. Generates embeddings for each page
+    5. Stores pages with embeddings in the database
+    """
+    # Check if book exists
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    
+    results = []
+    
+    for file in files:
+        try:
+            # Validate file type
+            allowed_types = ['application/pdf', 'application/msword', 
+                           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                           'text/plain']
+            
+            if file.content_type not in allowed_types:
+                results.append({
+                    "filename": file.filename,
+                    "status": "error",
+                    "message": f"Unsupported file type: {file.content_type}"
+                })
+                continue
+            
+            # Read file content
+            file_content = await file.read()
+            
+            # Process file using file service
+            page_data_list = await file_service.process_bulk_text_upload(
+                file_content, file.filename
+            )
+            
+            # Get the current highest page number for this book
+            last_page = db.query(Page).filter(Page.book_id == book_id).order_by(Page.page_number.desc()).first()
+            next_page_number = (last_page.page_number + 1) if last_page else 1
+            
+            pages_created = []
+            
+            for i, page_data in enumerate(page_data_list):
+                # Generate embedding for the page text
+                embedding_vector = None
+                if page_data.get('text'):
+                    embedding_vector = await embedding_service.generate_embedding(page_data['text'])
+                
+                # Create page in database
+                db_page = Page(
+                    book_id=book_id,
+                    page_number=next_page_number + i,
+                    original_text=page_data.get('text', ''),
+                    embedding_model=embedding_service.model_name,
+                    embedding_vector=embedding_vector
+                )
+                
+                db.add(db_page)
+                pages_created.append({
+                    "page_number": next_page_number + i,
+                    "text_length": len(page_data.get('text', ''))
+                })
+            
+            db.commit()
+            
+            results.append({
+                "filename": file.filename,
+                "status": "success",
+                "pages_created": len(pages_created),
+                "pages": pages_created
+            })
+            
+        except Exception as e:
+            db.rollback()
+            results.append({
+                "filename": file.filename,
+                "status": "error",
+                "message": str(e)
+            })
+    
+    return {
+        "message": "File upload processing completed",
+        "results": results
+    }
