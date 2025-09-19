@@ -37,9 +37,14 @@ class SearchService:
             # Set defaults
             limit = limit or self.default_limit
             similarity_threshold = similarity_threshold or self.default_similarity_threshold
-            
+
+            print(f"SEMANTIC SEARCH: Query: '{query}', limit: {limit}, threshold: {similarity_threshold}")
+            logger.info(f"Performing semantic search for query: '{query}' with limit: {limit}, threshold: {similarity_threshold}")
+
             # Generate embedding for the query
             query_embedding = await embedding_service.generate_embedding(query)
+            print(f"SEMANTIC SEARCH: Generated embedding: {len(query_embedding) if query_embedding else 0} dimensions")
+            logger.info(f"Generated query embedding: {len(query_embedding) if query_embedding else 0} dimensions")
             
             if not query_embedding:
                 logger.error("Failed to generate embedding for search query")
@@ -47,8 +52,9 @@ class SearchService:
             
             # Perform vector similarity search using pgvector
             # Using cosine similarity (1 - cosine_distance)
+            # Let's first try without similarity threshold to see all results
             sql_query = text("""
-                SELECT 
+                SELECT
                     p.id,
                     p.book_id,
                     p.page_number,
@@ -62,7 +68,6 @@ class SearchService:
                 FROM pages p
                 JOIN books b ON p.book_id = b.id
                 WHERE p.embedding_vector IS NOT NULL
-                    AND 1 - (p.embedding_vector <=> :query_embedding) >= :similarity_threshold
                 ORDER BY p.embedding_vector <=> :query_embedding
                 LIMIT :limit
             """)
@@ -70,14 +75,15 @@ class SearchService:
             result = db.execute(
                 sql_query,
                 {
-                    "query_embedding": str(query_embedding),
-                    "similarity_threshold": similarity_threshold,
+                    "query_embedding": query_embedding,
                     "limit": limit
                 }
             )
             
             rows = result.fetchall()
-            
+            print(f"SEMANTIC SEARCH: Database query returned {len(rows)} rows")
+            logger.info(f"Semantic search database query returned {len(rows)} rows")
+
             # Convert to SearchResult objects
             search_results = []
             for row in rows:
@@ -123,11 +129,16 @@ class SearchService:
         """
         try:
             limit = limit or self.default_limit
-            
+            print(f"TEXT SEARCH: Performing text search for query: '{query}' with limit: {limit}")
+            logger.info(f"Performing text search for query: '{query}' with limit: {limit}")
+
             # Simple text search using ILIKE
             pages = db.query(Page, Book).join(Book).filter(
                 Page.original_text.ilike(f"%{query}%")
             ).limit(limit).all()
+
+            print(f"TEXT SEARCH: Found {len(pages)} results")
+            logger.info(f"Text search found {len(pages)} results")
             
             search_results = []
             for page, book in pages:
@@ -245,7 +256,7 @@ class SearchService:
             result = db.execute(
                 sql_query,
                 {
-                    "ref_embedding": str(ref_page.embedding_vector),
+                    "ref_embedding": ref_page.embedding_vector,
                     "page_id": page_id,
                     "limit": limit
                 }

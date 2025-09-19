@@ -8,17 +8,19 @@ class SearchRequest(BaseModel):
     similarity_threshold: Optional[float] = 0.7
 
 class SearchResult(BaseModel):
-    page_id: UUID
-    book_id: UUID
+    page_id: int
+    book_id: int
     page_number: int
     original_text: str
     en_translation: Optional[str] = None
     id_translation: Optional[str] = None
     similarity_score: float
     snippet: str
+    book_title: str
+    book_author: Optional[str] = None
 
 class SearchResponse(BaseModel):
     results: List[SearchResult]
     query: str
     total_results: int
-    query_embedding_model: str
+    query_embedding_model: Optional[str] = None

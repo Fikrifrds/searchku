@@ -4,7 +4,7 @@ from ..database import get_db
 from ..schemas.search import SearchRequest, SearchResponse
 from ..services.search_service import search_service
 
-router = APIRouter(prefix="/search", tags=["search"])
+router = APIRouter(tags=["search"])
 
 @router.post("/semantic", response_model=SearchResponse)
 async def semantic_search(
@@ -15,6 +15,7 @@ async def semantic_search(
     Perform semantic search across book pages using vector embeddings.
     """
     try:
+        print(f"ROUTER: Semantic search called with query: {request.query}")
         # Use the search service for semantic search
         results = await search_service.semantic_search(
             db=db,
@@ -22,6 +23,7 @@ async def semantic_search(
             limit=request.limit,
             similarity_threshold=request.similarity_threshold
         )
+        print(f"ROUTER: Semantic search returned {len(results)} results")
         
         return SearchResponse(
             query=request.query,
@@ -41,11 +43,13 @@ async def text_search(
     Perform simple text-based search as fallback.
     """
     try:
+        print(f"ROUTER: Text search called with query: {request.query}")
         results = await search_service.text_search(
             db=db,
             query=request.query,
             limit=request.limit
         )
+        print(f"ROUTER: Search service returned {len(results)} results")
         
         return SearchResponse(
             query=request.query,

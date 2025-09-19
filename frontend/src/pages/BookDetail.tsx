@@ -22,6 +22,7 @@ export default function BookDetail() {
   const [uploadErrors, setUploadErrors] = useState<{[key: string]: string}>({});
   const [uploadSuccess, setUploadSuccess] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [useOcr, setUseOcr] = useState(false);
   
   const book = books.find(b => b.id === bookId);
   const bookPages = pages.filter(p => p.book_id === bookId);
@@ -84,9 +85,10 @@ export default function BookDetail() {
     selectedFiles.forEach(file => {
       formData.append('files', file);
     });
+    formData.append('use_ocr', useOcr.toString());
     
     try {
-      const response = await fetch(`http://localhost:8001/api/books/${bookId}/upload-files`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/books/${bookId}/upload-files`, {
         method: 'POST',
         body: formData,
       });
@@ -383,6 +385,25 @@ export default function BookDetail() {
                 </div>
               </div>
             )}
+
+            {/* OCR Option */}
+            <div className="mt-6">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={useOcr}
+                  onChange={(e) => setUseOcr(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  disabled={isUploading}
+                />
+                <span className="text-sm text-gray-700">
+                  Use OCR for scanned documents (images embedded in PDFs)
+                </span>
+              </label>
+              <p className="text-xs text-gray-500 mt-1">
+                Enable this option if your PDF contains scanned images rather than selectable text
+              </p>
+            </div>
 
             {/* Upload Button */}
             <div className="mt-6 flex justify-end gap-3">

@@ -38,7 +38,7 @@ export default function Search() {
       const searchRequest = {
         query: query.trim(),
         limit: 20,
-        similarity_threshold: 0.1
+        similarity_threshold: 0.8
       };
       
       let response;
