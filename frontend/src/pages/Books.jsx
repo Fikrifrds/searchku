@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, BookOpen, Edit, Trash2, Upload } from 'lucide-react';
 import { useBookStore } from '../lib/store';
-import { Book } from '../lib/api';
+
 import { cn } from '../lib/utils';
 
 export default function Books() {
@@ -19,7 +19,7 @@ export default function Books() {
     book.author.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleDeleteBook = async (bookId: number) => {
+  const handleDeleteBook = async (bookId) => {
     if (window.confirm('Are you sure you want to delete this book?')) {
       await deleteBook(bookId);
     }
@@ -115,12 +115,7 @@ export default function Books() {
   );
 }
 
-interface BookCardProps {
-  book: Book;
-  onDelete: () => void;
-}
-
-function BookCard({ book, onDelete }: BookCardProps) {
+function BookCard({ book, onDelete }) {
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow">
       <div className="aspect-w-3 aspect-h-4">
@@ -163,11 +158,7 @@ function BookCard({ book, onDelete }: BookCardProps) {
   );
 }
 
-interface CreateBookModalProps {
-  onClose: () => void;
-}
-
-function CreateBookModal({ onClose }: CreateBookModalProps) {
+function CreateBookModal({ onClose }) {
   const { createBook, loading } = useBookStore();
   const [formData, setFormData] = useState({
     title: '',
@@ -176,7 +167,7 @@ function CreateBookModal({ onClose }: CreateBookModalProps) {
     description: ''
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       await createBook(formData);

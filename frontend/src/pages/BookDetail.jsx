@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { useBookStore, usePageStore } from '../lib/store';
-import { Book, Page } from '../lib/api';
+
 import { cn } from '../lib/utils';
 
 export default function BookDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const bookId = parseInt(id || '0');
   
   const { books, loading: bookLoading, fetchBooks } = useBookStore();
@@ -17,10 +17,10 @@ export default function BookDetail() {
   const [showFileUploadForm, setShowFileUploadForm] = useState(false);
   
   // File upload states
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadErrors, setUploadErrors] = useState<{[key: string]: string}>({});
-  const [uploadSuccess, setUploadSuccess] = useState<string[]>([]);
+  const [uploadErrors, setUploadErrors] = useState({});
+  const [uploadSuccess, setUploadSuccess] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [useOcr, setUseOcr] = useState(false);
   
@@ -34,14 +34,14 @@ export default function BookDetail() {
     fetchPages(bookId);
   }, [bookId, books.length, fetchBooks, fetchPages]);
 
-  const handleDeletePage = async (pageNumber: number) => {
+  const handleDeletePage = async (pageNumber) => {
     if (window.confirm('Are you sure you want to delete this page?')) {
       await deletePage(bookId, pageNumber);
     }
   };
 
   // File upload handlers
-  const handleFileSelect = (files: FileList | null) => {
+  const handleFileSelect = (files) => {
     if (!files) return;
     
     const validFiles = Array.from(files).filter(file => {
@@ -54,21 +54,21 @@ export default function BookDetail() {
     setUploadSuccess([]);
   };
 
-  const removeFile = (index: number) => {
+  const removeFile = (index) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragOver(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = (e) => {
     e.preventDefault();
     setIsDragOver(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
     handleFileSelect(e.dataTransfer.files);
@@ -106,7 +106,7 @@ export default function BookDetail() {
     } catch (error) {
       console.error('Upload failed:', error);
       const errorMsg = error instanceof Error ? error.message : 'Upload failed';
-      const errors: {[key: string]: string} = {};
+      const errors = {};
       selectedFiles.forEach(file => {
         errors[file.name] = errorMsg;
       });
@@ -439,12 +439,7 @@ export default function BookDetail() {
   );
 }
 
-interface PageCardProps {
-  page: Page;
-  onDelete: () => void;
-}
-
-function PageCard({ page, onDelete }: PageCardProps) {
+function PageCard({ page, onDelete }) {
   const [isExpanded, setIsExpanded] = useState(false);
   
   return (
@@ -508,19 +503,14 @@ function PageCard({ page, onDelete }: PageCardProps) {
   );
 }
 
-interface CreatePageModalProps {
-  bookId: number;
-  onClose: () => void;
-}
-
-function CreatePageModal({ bookId, onClose }: CreatePageModalProps) {
+function CreatePageModal({ bookId, onClose }) {
   const { createPage, loading } = usePageStore();
   const [formData, setFormData] = useState({
     page_number: 1,
     original_text: ''
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       await createPage(bookId, formData);
@@ -581,17 +571,12 @@ function CreatePageModal({ bookId, onClose }: CreatePageModalProps) {
   );
 }
 
-interface UploadCoverModalProps {
-  bookId: number;
-  onClose: () => void;
-}
-
-function UploadCoverModal({ bookId, onClose }: UploadCoverModalProps) {
-  const [file, setFile] = useState<File | null>(null);
+function UploadCoverModal({ bookId, onClose }) {
+  const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const { fetchBooks } = useBookStore();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file) return;
 

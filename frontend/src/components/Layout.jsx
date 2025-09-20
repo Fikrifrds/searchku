@@ -2,9 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Book, Search, Upload, Home } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-interface LayoutProps {
-  children: React.ReactNode;
-}
+
 
 const navigation = [
   { name: 'Home', href: '/', icon: Home },
@@ -12,7 +10,7 @@ const navigation = [
   { name: 'Search', href: '/search', icon: Search },
 ];
 
-export default function Layout({ children }: LayoutProps) {
+export default function Layout({ children }) {
   const location = useLocation();
 
   return (

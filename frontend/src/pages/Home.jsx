@@ -8,7 +8,7 @@ export default function Home() {
   const { books, fetchBooks } = useBookStore();
   const { pages, fetchAllPages } = usePageStore();
   const { results } = useSearchStore();
-  const [recentBooks, setRecentBooks] = useState<any[]>([]);
+  const [recentBooks, setRecentBooks] = useState([]);
 
   useEffect(() => {
     fetchBooks();

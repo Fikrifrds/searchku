@@ -4,30 +4,14 @@ import { useBookStore } from '../lib/store';
 import { apiClient } from '../lib/api';
 import { cn } from '../lib/utils';
 
-interface SearchResult {
-  page: {
-    id: number;
-    book_id: number;
-    page_number: number;
-    original_text: string;
-    translated_text?: string;
-  };
-  book: {
-    id: number;
-    title: string;
-    author: string;
-    description?: string;
-  };
-  similarity_score?: number;
-  snippet?: string;
-}
+
 
 export default function Search() {
   const { books } = useBookStore();
   const [query, setQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
-  const [searchType, setSearchType] = useState<'semantic' | 'text'>('semantic');
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedBookId, setSelectedBookId] = useState(null);
+  const [searchType, setSearchType] = useState('semantic');
   const [isSearching, setIsSearching] = useState(false);
 
   const handleSearch = async () => {
@@ -63,7 +47,7 @@ export default function Search() {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
       handleSearch();
     }
@@ -108,7 +92,7 @@ export default function Search() {
               <label className="text-sm font-medium text-gray-700">Search Type:</label>
               <select
                 value={searchType}
-                onChange={(e) => setSearchType(e.target.value as 'semantic' | 'text')}
+                onChange={(e) => setSearchType(e.target.value)}
                 className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="semantic">Semantic Search</option>
@@ -204,11 +188,7 @@ export default function Search() {
   );
 }
 
-interface SearchResultCardProps {
-  result: SearchResult;
-}
-
-function SearchResultCard({ result }: SearchResultCardProps) {
+function SearchResultCard({ result }) {
   const { page, book, similarity_score, snippet } = result;
   
   return (
