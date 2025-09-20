@@ -13,8 +13,17 @@ class EmbeddingService:
         self.client = openai.OpenAI(
             api_key=os.getenv("OPENAI_API_KEY")
         )
-        self.model = "text-embedding-3-small"
-        self.dimension = 1536
+        self.model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+
+        # Use reduced dimensions for text-embedding-3-large to maintain pgvector compatibility
+        env_dimension = int(os.getenv("EMBEDDING_DIMENSION", 1536))
+        if self.model == "text-embedding-3-large" and env_dimension > 2000:
+            self.dimension = 1536  # Reduce to 1536 for pgvector compatibility
+            logger.info(f"Reducing {self.model} dimensions from {env_dimension} to {self.dimension} for pgvector compatibility")
+        else:
+            self.dimension = env_dimension
+
+        logger.info(f"Embedding service initialized: model={self.model}, dimensions={self.dimension}")
     
     async def generate_embedding(self, text: str) -> Optional[List[float]]:
         """
@@ -34,12 +43,18 @@ class EmbeddingService:
                 logger.warning("Empty text provided for embedding generation")
                 return None
             
-            # Generate embedding
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=cleaned_text,
-                encoding_format="float"
-            )
+            # Generate embedding with specific dimensions if supported
+            embedding_params = {
+                "model": self.model,
+                "input": cleaned_text,
+                "encoding_format": "float"
+            }
+
+            # Add dimensions parameter for models that support it
+            if self.model in ["text-embedding-3-large", "text-embedding-3-small"]:
+                embedding_params["dimensions"] = self.dimension
+
+            response = self.client.embeddings.create(**embedding_params)
             
             embedding = response.data[0].embedding
 
