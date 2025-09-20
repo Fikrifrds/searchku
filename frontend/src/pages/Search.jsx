@@ -11,33 +11,60 @@ export default function Search() {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedBookId, setSelectedBookId] = useState(null);
-  const [searchType, setSearchType] = useState('semantic');
+  const [searchType, setSearchType] = useState('multilingual');
   const [isSearching, setIsSearching] = useState(false);
+
+  // Simple language detection
+  const detectLanguage = (text) => {
+    const trimmedText = text.trim().toLowerCase();
+
+    // Indonesian words
+    const indonesianWords = ['dan', 'atau', 'yang', 'di', 'ke', 'dari', 'untuk', 'dengan', 'pada', 'adalah', 'tentang', 'hadis', 'niat', 'puasa', 'sholat'];
+    // English words
+    const englishWords = ['the', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'about', 'intention', 'prayer', 'fasting'];
+
+    const words = trimmedText.split(/\s+/);
+    let indonesianCount = 0;
+    let englishCount = 0;
+
+    words.forEach(word => {
+      if (indonesianWords.includes(word)) indonesianCount++;
+      if (englishWords.includes(word)) englishCount++;
+    });
+
+    if (indonesianCount > englishCount) return 'id';
+    if (englishCount > indonesianCount) return 'en';
+    return 'auto'; // Default to auto-detection
+  };
 
   const handleSearch = async () => {
     if (!query.trim()) return;
-    
+
     setIsSearching(true);
     try {
+      const detectedLanguage = detectLanguage(query);
       const searchRequest = {
         query: query.trim(),
         limit: 20,
-        similarity_threshold: 0.1
+        similarity_threshold: searchType === 'multilingual' ? 0.1 : 0.1,
+        query_language: detectedLanguage
       };
-      
+
       let response;
-      if (searchType === 'semantic') {
+      if (searchType === 'multilingual') {
+        response = await apiClient.multilingualSearch(searchRequest);
+      } else if (searchType === 'semantic') {
         response = await apiClient.semanticSearch(searchRequest);
       } else {
         response = await apiClient.textSearch(searchRequest);
       }
-      
+
       // Filter by selected book if specified
       let results = response.results;
       if (selectedBookId) {
         results = results.filter(result => result.book_id === selectedBookId);
       }
-      
+
       setSearchResults(results);
     } catch (error) {
       console.error('Search failed:', error);
@@ -64,7 +91,7 @@ export default function Search() {
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900">Search Books</h1>
         <p className="mt-2 text-gray-600">
-          Search through your book collection using semantic or text-based search
+          Search through your Arabic book collection using English, Bahasa Indonesia, or Arabic queries
         </p>
       </div>
 
@@ -95,6 +122,7 @@ export default function Search() {
                 onChange={(e) => setSearchType(e.target.value)}
                 className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
+                <option value="multilingual">Multilingual Search (Recommended)</option>
                 <option value="semantic">Semantic Search</option>
                 <option value="text">Text Search</option>
               </select>
@@ -180,10 +208,12 @@ export default function Search() {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
         <h3 className="text-lg font-medium text-blue-800 mb-3">Search Tips</h3>
         <ul className="list-disc list-inside space-y-2 text-sm text-blue-700">
-          <li><strong>Semantic Search:</strong> Finds content based on meaning and context</li>
+          <li><strong>Multilingual Search (Recommended):</strong> Search Arabic content using English or Bahasa Indonesia. Automatically detects your query language and finds relevant Arabic text.</li>
+          <li><strong>Semantic Search:</strong> Finds content based on meaning and context in the same language</li>
           <li><strong>Text Search:</strong> Finds exact text matches in your books</li>
           <li>Use the book filter to search within specific books</li>
-          <li>Try different keywords if you don't find what you're looking for</li>
+          <li><strong>Language Detection:</strong> The system automatically detects if you're searching in English, Bahasa Indonesia, or Arabic</li>
+          <li>Try queries like "hadis tentang niat" or "hadith about intention" to find Arabic content</li>
         </ul>
       </div>
     </div>

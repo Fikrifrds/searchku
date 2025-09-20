@@ -71,13 +71,14 @@ class S3Service:
             image_id = str(uuid.uuid4())
             key = f"pages/book_{book_id}/page_{page_number}_{image_id}.{file_format}"
 
-            # Upload to S3
+            # Upload to S3 with public read access
             self.s3_client.put_object(
                 Bucket=self.bucket_name,
                 Key=key,
                 Body=image_data,
                 ContentType=f"image/{file_format}",
                 CacheControl="max-age=31536000",  # Cache for 1 year
+                ACL='public-read',  # Make the object publicly readable
                 Metadata={
                     'book_id': str(book_id),
                     'page_number': str(page_number),
@@ -176,6 +177,46 @@ class S3Service:
 
         logger.info(f"Successfully uploaded {len(results)} out of {len(images_data)} page images")
         return results
+
+    async def make_object_public(self, image_url: str) -> bool:
+        """
+        Make an existing S3 object publicly readable.
+
+        Args:
+            image_url: The S3 URL of the image to make public
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.is_available():
+            logger.error("S3 service not available")
+            return False
+
+        try:
+            # Extract key from URL
+            if not image_url.startswith(f"https://{self.bucket_name}.s3."):
+                logger.error(f"Invalid S3 URL format: {image_url}")
+                return False
+
+            # Extract key from URL
+            key = image_url.split(f"https://{self.bucket_name}.s3.{self.aws_region}.amazonaws.com/")[1]
+
+            # Update ACL to make it public
+            self.s3_client.put_object_acl(
+                Bucket=self.bucket_name,
+                Key=key,
+                ACL='public-read'
+            )
+
+            logger.info(f"Successfully made image public: {image_url}")
+            return True
+
+        except ClientError as e:
+            logger.error(f"AWS S3 error making image public: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"Error making image public: {str(e)}")
+            return False
 
     def get_bucket_info(self) -> dict:
         """
