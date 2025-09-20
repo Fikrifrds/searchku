@@ -52,7 +52,7 @@ class SearchService:
             
             # Perform vector similarity search using pgvector
             # Using cosine similarity (1 - cosine_distance)
-            # Let's first try without similarity threshold to see all results
+            # Cast the query embedding to vector type for pgvector compatibility
             sql_query = text("""
                 SELECT
                     p.id,
@@ -64,11 +64,12 @@ class SearchService:
                     p.embedding_model,
                     b.title as book_title,
                     b.author as book_author,
-                    1 - (p.embedding_vector <=> :query_embedding) as similarity_score
+                    1 - (p.embedding_vector <=> CAST(:query_embedding AS vector)) as similarity_score
                 FROM pages p
                 JOIN books b ON p.book_id = b.id
                 WHERE p.embedding_vector IS NOT NULL
-                ORDER BY p.embedding_vector <=> :query_embedding
+                    AND 1 - (p.embedding_vector <=> CAST(:query_embedding AS vector)) >= :similarity_threshold
+                ORDER BY p.embedding_vector <=> CAST(:query_embedding AS vector)
                 LIMIT :limit
             """)
             
@@ -76,6 +77,7 @@ class SearchService:
                 sql_query,
                 {
                     "query_embedding": query_embedding,
+                    "similarity_threshold": similarity_threshold,
                     "limit": limit
                 }
             )

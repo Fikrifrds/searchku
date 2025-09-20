@@ -22,7 +22,7 @@ export default function Search() {
       const searchRequest = {
         query: query.trim(),
         limit: 20,
-        similarity_threshold: 0.8
+        similarity_threshold: 0.1
       };
       
       let response;
@@ -35,7 +35,7 @@ export default function Search() {
       // Filter by selected book if specified
       let results = response.results;
       if (selectedBookId) {
-        results = results.filter(result => result.book.id === selectedBookId);
+        results = results.filter(result => result.book_id === selectedBookId);
       }
       
       setSearchResults(results);
@@ -157,7 +157,7 @@ export default function Search() {
           </div>
           <div className="divide-y divide-gray-200">
             {searchResults.map((result, index) => (
-              <SearchResultCard key={`${result.page.id}-${index}`} result={result} />
+              <SearchResultCard key={`${result.page_id}-${index}`} result={result} />
             ))}
           </div>
         </div>
@@ -189,7 +189,18 @@ export default function Search() {
 }
 
 function SearchResultCard({ result }) {
-  const { page, book, similarity_score, snippet } = result;
+  const { 
+    page_id, 
+    book_id, 
+    page_number, 
+    original_text, 
+    en_translation, 
+    id_translation, 
+    similarity_score, 
+    snippet, 
+    book_title, 
+    book_author 
+  } = result;
   
   return (
     <div className="p-6 hover:bg-gray-50 transition-colors">
@@ -198,24 +209,24 @@ function SearchResultCard({ result }) {
           {/* Book Info */}
           <div className="flex items-center space-x-2 mb-2">
             <Book className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-medium text-gray-900">{book.title}</span>
-            <span className="text-sm text-gray-500">by {book.author}</span>
-            <span className="text-sm text-gray-400">• Page {page.page_number}</span>
+            <span className="text-sm font-medium text-gray-900">{book_title}</span>
+            <span className="text-sm text-gray-500">by {book_author}</span>
+            <span className="text-sm text-gray-400">• Page {page_number}</span>
           </div>
           
           {/* Content Preview */}
           <div className="mt-2">
             <p className="text-sm text-gray-700 line-clamp-3">
-              {snippet || page.original_text.substring(0, 200) + (page.original_text.length > 200 ? '...' : '')}
+              {snippet || original_text.substring(0, 200) + (original_text.length > 200 ? '...' : '')}
             </p>
           </div>
           
           {/* Translation if available */}
-          {page.translated_text && (
+          {(en_translation || id_translation) && (
             <div className="mt-3 p-3 bg-gray-50 rounded-md">
               <p className="text-xs font-medium text-gray-500 mb-1">Translation:</p>
               <p className="text-sm text-gray-700 line-clamp-2">
-                {page.translated_text.substring(0, 150) + (page.translated_text.length > 150 ? '...' : '')}
+                {(en_translation || id_translation).substring(0, 150) + ((en_translation || id_translation).length > 150 ? '...' : '')}
               </p>
             </div>
           )}
