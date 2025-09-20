@@ -12,6 +12,7 @@ from docx import Document
 import pytesseract
 from pdf2image import convert_from_bytes
 import fitz  # PyMuPDF
+from .s3_service import s3_service
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +305,50 @@ class FileService:
             logger.warning(f"Error cleaning Arabic OCR text: {str(e)}")
             return text
 
+    async def _generate_page_image(self, page, page_number: int, book_id: int) -> Optional[str]:
+        """
+        Generate an image from a PDF page and upload to S3.
+
+        Args:
+            page: PyMuPDF page object
+            page_number: Page number
+            book_id: Book ID
+
+        Returns:
+            S3 URL of the uploaded image, or None if failed
+        """
+        try:
+            logger.debug(f"Starting image generation for page {page_number}, book {book_id}")
+
+            # Convert page to high-quality image
+            pix = page.get_pixmap(dpi=200)  # High quality for display
+            img_data = pix.tobytes("png")
+            logger.debug(f"Generated PNG image data: {len(img_data)} bytes")
+
+            # Upload to S3 if available
+            if s3_service.is_available():
+                logger.debug(f"S3 service available, uploading image for page {page_number}")
+                image_url = await s3_service.upload_page_image(
+                    img_data, book_id, page_number, "png"
+                )
+                if image_url:
+                    logger.info(f"✅ Generated and uploaded image for page {page_number}: {image_url}")
+                    return image_url
+                else:
+                    logger.error(f"❌ Failed to upload image for page {page_number} to S3")
+            else:
+                logger.warning("⚠️  S3 service not available - page images will not be generated")
+                s3_config = s3_service.get_bucket_info()
+                logger.warning(f"S3 config: {s3_config}")
+
+            return None
+
+        except Exception as e:
+            logger.error(f"❌ Error generating image for page {page_number}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return None
+
     async def _extract_text_with_pymupdf(self, content: bytes) -> str:
         """
         Extract text from PDF using PyMuPDF, which often works better with Arabic text.
@@ -405,17 +450,19 @@ class FileService:
                 detail="Failed to extract text from file"
             )
 
-    async def _process_pdf_with_smart_ocr(self, content: bytes, filename: str) -> list:
+    async def _process_pdf_with_smart_ocr(self, content: bytes, filename: str, book_id: int) -> list:
         """
         Process PDF with intelligent OCR detection per page.
         Uses text extraction for readable pages and OCR for image-only pages.
+        Also generates page images and uploads them to S3.
 
         Args:
             content: The PDF file content as bytes
             filename: The original filename
+            book_id: The book ID for organizing images
 
         Returns:
-            List of page data dictionaries with 'text' and 'extraction_method' keys
+            List of page data dictionaries with 'text', 'extraction_method', and 'page_image_url' keys
         """
         try:
             logger.info(f"Starting intelligent PDF processing for: {filename}")
@@ -474,10 +521,14 @@ class FileService:
                         logger.info(f"Page {page_num + 1}: Using text extraction ({text_length} characters)")
                         cleaned_text = page_text.strip()
                         if cleaned_text:
+                            # Generate page image
+                            page_image_url = await self._generate_page_image(page, page_num + 1, book_id)
+
                             pages.append({
                                 'text': cleaned_text,
                                 'extraction_method': 'text_extraction',
-                                'page_number': page_num + 1
+                                'page_number': page_num + 1,
+                                'page_image_url': page_image_url
                             })
 
                     else:
@@ -538,10 +589,15 @@ class FileService:
 
                             if ocr_text and len(ocr_text) > 10:
                                 logger.info(f"Page {page_num + 1}: OCR extracted {len(ocr_text)} characters")
+
+                                # Generate page image
+                                page_image_url = await self._generate_page_image(page, page_num + 1, book_id)
+
                                 pages.append({
                                     'text': ocr_text,
                                     'extraction_method': 'ocr',
-                                    'page_number': page_num + 1
+                                    'page_number': page_num + 1,
+                                    'page_image_url': page_image_url
                                 })
                             else:
                                 logger.warning(f"Page {page_num + 1}: OCR produced no meaningful text")
@@ -574,7 +630,7 @@ class FileService:
                 detail=f"Failed to process PDF file: {str(e)}"
             )
 
-    async def process_bulk_text_upload(self, content: bytes, filename: str) -> list:
+    async def process_bulk_text_upload(self, content: bytes, filename: str, book_id: int = None) -> list:
         """
         Process bulk text upload for pages. Supports .txt, .md, .pdf, .doc, and .docx files.
         Automatically detects which pages need OCR and which can use direct text extraction.
@@ -601,7 +657,11 @@ class FileService:
             # Extract text based on file type with intelligent OCR detection
             if content_type == "application/pdf":
                 # Use intelligent PDF processing that detects OCR needs per page
-                pages = await self._process_pdf_with_smart_ocr(content, filename)
+                if book_id is not None:
+                    pages = await self._process_pdf_with_smart_ocr(content, filename, book_id)
+                else:
+                    logger.warning("No book_id provided for PDF processing - page images will not be generated")
+                    pages = await self._process_pdf_with_smart_ocr(content, filename, 0)
                 logger.info(f"PDF processing completed: {len(pages)} pages")
                 return pages
             else:

@@ -62,6 +62,7 @@ class SearchService:
                     p.original_text,
                     p.en_translation,
                     p.id_translation,
+                    p.page_image_url,
                     p.embedding_model,
                     b.title as book_title,
                     b.author as book_author,
@@ -100,6 +101,7 @@ class SearchService:
                     original_text=row.original_text,
                     en_translation=row.en_translation,
                     id_translation=row.id_translation,
+                    page_image_url=row.page_image_url,
                     similarity_score=float(row.similarity_score),
                     snippet=snippet,
                     book_title=row.book_title,
@@ -160,6 +162,7 @@ class SearchService:
                     p.original_text,
                     p.en_translation,
                     p.id_translation,
+                    p.page_image_url,
                     p.embedding_model,
                     b.title as book_title,
                     b.author as book_author,
@@ -209,6 +212,7 @@ class SearchService:
                     original_text=row.original_text,
                     en_translation=row.en_translation,
                     id_translation=row.id_translation,
+                    page_image_url=row.page_image_url,
                     similarity_score=float(row.similarity_score),
                     snippet=snippet,
                     book_title=row.book_title,
@@ -416,13 +420,14 @@ class SearchService:
             
             # Find similar pages using vector similarity
             sql_query = text("""
-                SELECT 
+                SELECT
                     p.id,
                     p.book_id,
                     p.page_number,
                     p.original_text,
                     p.en_translation,
                     p.id_translation,
+                    p.page_image_url,
                     b.title as book_title,
                     b.author as book_author,
                     1 - (p.embedding_vector <=> :ref_embedding) as similarity_score
@@ -456,6 +461,7 @@ class SearchService:
                     original_text=row.original_text,
                     en_translation=row.en_translation,
                     id_translation=row.id_translation,
+                    page_image_url=row.page_image_url,
                     similarity_score=float(row.similarity_score),
                     snippet=snippet,
                     book_title=row.book_title,

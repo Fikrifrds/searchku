@@ -155,10 +155,12 @@ export default function Search() {
               Found {searchResults.length} results for "{query}"
             </p>
           </div>
-          <div className="divide-y divide-gray-200">
-            {searchResults.map((result, index) => (
-              <SearchResultCard key={`${result.page_id}-${index}`} result={result} />
-            ))}
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {searchResults.map((result, index) => (
+                <SearchResultCard key={`${result.page_id}-${index}`} result={result} />
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -189,56 +191,98 @@ export default function Search() {
 }
 
 function SearchResultCard({ result }) {
-  const { 
-    page_id, 
-    book_id, 
-    page_number, 
-    original_text, 
-    en_translation, 
-    id_translation, 
-    similarity_score, 
-    snippet, 
-    book_title, 
-    book_author 
+  const [showText, setShowText] = useState(false);
+  const {
+    page_id,
+    book_id,
+    page_number,
+    original_text,
+    en_translation,
+    id_translation,
+    page_image_url,
+    similarity_score,
+    snippet,
+    book_title,
+    book_author
   } = result;
-  
+
   return (
-    <div className="p-6 hover:bg-gray-50 transition-colors">
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          {/* Book Info */}
-          <div className="flex items-center space-x-2 mb-2">
-            <Book className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-medium text-gray-900">{book_title}</span>
-            <span className="text-sm text-gray-500">by {book_author}</span>
-            <span className="text-sm text-gray-400">• Page {page_number}</span>
+    <div className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-100">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            {/* Book Info */}
+            <div className="flex items-center space-x-2 mb-1">
+              <Book className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <span className="text-sm font-medium text-gray-900 truncate">{book_title}</span>
+            </div>
+            <div className="text-xs text-gray-500">
+              by {book_author} • Page {page_number}
+            </div>
+
+            {/* Badges */}
+            <div className="flex items-center space-x-2 mt-2">
+              {page_image_url && (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Has Image
+                </span>
+              )}
+              {similarity_score && (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  {(similarity_score * 100).toFixed(1)}% match
+                </span>
+              )}
+            </div>
           </div>
-          
-          {/* Content Preview */}
-          <div className="mt-2">
-            <p className="text-sm text-gray-700 line-clamp-3">
-              {snippet || original_text.substring(0, 200) + (original_text.length > 200 ? '...' : '')}
-            </p>
+        </div>
+
+        {/* Toggle Button for Image/Text */}
+        {page_image_url && (
+          <div className="mt-3">
+            <button
+              onClick={() => setShowText(!showText)}
+              className="text-xs text-blue-600 hover:text-blue-500 font-medium"
+            >
+              {showText ? "👁️ Show Image" : "📝 Show Text"}
+            </button>
           </div>
-          
-          {/* Translation if available */}
-          {(en_translation || id_translation) && (
-            <div className="mt-3 p-3 bg-gray-50 rounded-md">
-              <p className="text-xs font-medium text-gray-500 mb-1">Translation:</p>
-              <p className="text-sm text-gray-700 line-clamp-2">
-                {(en_translation || id_translation).substring(0, 150) + ((en_translation || id_translation).length > 150 ? '...' : '')}
+        )}
+      </div>
+
+      {/* Content Area */}
+      <div className="p-4">
+        {page_image_url && !showText ? (
+          // Show image preview
+          <div className="bg-gray-50 rounded-lg overflow-hidden">
+            <img
+              src={page_image_url}
+              alt={`Page ${page_number} from ${book_title}`}
+              className="w-full h-auto max-h-80 object-contain"
+              onError={(e) => {
+                e.target.style.display = 'none';
+                setShowText(true);
+              }}
+            />
+          </div>
+        ) : (
+          // Show text content
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm text-gray-700 line-clamp-4 leading-relaxed">
+                {snippet || original_text.substring(0, 300) + (original_text.length > 300 ? '...' : '')}
               </p>
             </div>
-          )}
-        </div>
-        
-        {/* Similarity Score */}
-        {similarity_score && (
-          <div className="ml-4 flex-shrink-0">
-            <div className="text-xs text-gray-500">Relevance</div>
-            <div className="text-sm font-medium text-gray-900">
-              {(similarity_score * 100).toFixed(1)}%
-            </div>
+
+            {/* Translation if available */}
+            {(en_translation || id_translation) && (
+              <div className="p-3 bg-blue-50 rounded-md">
+                <p className="text-xs font-medium text-blue-700 mb-1">Translation:</p>
+                <p className="text-sm text-blue-800 line-clamp-3 leading-relaxed">
+                  {(en_translation || id_translation).substring(0, 200) + ((en_translation || id_translation).length > 200 ? '...' : '')}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -246,7 +246,7 @@ async def upload_files_bulk(
             # Process file using file service with automatic OCR detection
             logger.info(f"Starting intelligent text extraction for: {file.filename}")
             page_data_list = await file_service.process_bulk_text_upload(
-                file_content, file.filename
+                file_content, file.filename, book_id
             )
             logger.info(f"Text extraction completed. Pages found: {len(page_data_list)}")
             
@@ -323,7 +323,8 @@ async def upload_files_bulk(
                     page_number=current_page_number,
                     original_text=page_data.get('text', ''),
                     embedding_model=embedding_service.model,
-                    embedding_vector=formatted_embedding
+                    embedding_vector=formatted_embedding,
+                    page_image_url=page_data.get('page_image_url')
                 )
 
                 db.add(db_page)

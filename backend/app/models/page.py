@@ -15,6 +15,7 @@ class Page(Base):
     embedding_model = Column(String(100), nullable=False, default="text-embedding-3-small", index=True)
     en_translation = Column(Text, nullable=True)
     id_translation = Column(Text, nullable=True)
+    page_image_url = Column(String(500), nullable=True, index=True)  # AWS S3 URL for page image
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

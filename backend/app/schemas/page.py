@@ -19,6 +19,7 @@ class PageResponse(PageBase):
     embedding_model: str
     en_translation: Optional[str] = None
     id_translation: Optional[str] = None
+    page_image_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     

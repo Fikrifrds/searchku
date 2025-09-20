@@ -15,6 +15,7 @@ class SearchResult(BaseModel):
     original_text: str
     en_translation: Optional[str] = None
     id_translation: Optional[str] = None
+    page_image_url: Optional[str] = None
     similarity_score: float
     snippet: str
     book_title: str

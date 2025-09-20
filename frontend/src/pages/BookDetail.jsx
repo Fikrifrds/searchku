@@ -444,55 +444,35 @@ export default function BookDetail() {
 
 function PageCard({ page, onDelete }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  
+  const [showText, setShowText] = useState(false);
+
   return (
-    <div className="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-500">Page {page.page_number}</span>
-            {page.embedding_model && (
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Indexed
-              </span>
-            )}
-          </div>
-          
-          <div className="mt-2">
-            <p className={cn(
-              "text-gray-700",
-              !isExpanded && "line-clamp-3"
-            )}>
-              {page.original_text}
-            </p>
-            {page.original_text.length > 200 && (
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="text-blue-600 hover:text-blue-500 text-sm mt-1"
-              >
-                {isExpanded ? 'Show less' : 'Show more'}
-              </button>
-            )}
-          </div>
-          
-          {page.translated_text && (
-            <div className="mt-3 p-3 bg-gray-50 rounded">
-              <p className="text-sm text-gray-600 font-medium">Translation:</p>
-              <p className="text-gray-700 mt-1">{page.translated_text}</p>
-            </div>
+    <div className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-sm transition-shadow">
+      <div className="flex justify-between items-start p-4 pb-0">
+        <div className="flex items-center space-x-2">
+          <span className="text-sm font-medium text-gray-500">Page {page.page_number}</span>
+          {page.embedding_model && (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              Indexed
+            </span>
           )}
-          
-          <div className="mt-3 text-xs text-gray-500">
-            Created: {new Date(page.created_at).toLocaleDateString()}
-            {page.updated_at !== page.created_at && (
-              <span className="ml-2">
-                Updated: {new Date(page.updated_at).toLocaleDateString()}
-              </span>
-            )}
-          </div>
+          {page.page_image_url && (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              Has Image
+            </span>
+          )}
         </div>
-        
-        <div className="flex space-x-2 ml-4">
+
+        <div className="flex space-x-2">
+          {page.page_image_url && (
+            <button
+              onClick={() => setShowText(!showText)}
+              className="text-gray-600 hover:text-gray-500 text-xs"
+              title={showText ? "Show image" : "Show text"}
+            >
+              {showText ? "Show Image" : "Show Text"}
+            </button>
+          )}
           <button
             onClick={onDelete}
             className="text-red-600 hover:text-red-500"
@@ -500,6 +480,69 @@ function PageCard({ page, onDelete }) {
           >
             <Trash2 className="h-4 w-4" />
           </button>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div className="p-4 pt-2">
+        {page.page_image_url && !showText ? (
+          // Show page image if available and not in text mode
+          <div className="space-y-3">
+            <div className="bg-gray-100 rounded-lg overflow-hidden">
+              <img
+                src={page.page_image_url}
+                alt={`Page ${page.page_number}`}
+                className="w-full h-auto max-h-96 object-contain"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  setShowText(true);
+                }}
+              />
+            </div>
+            {page.original_text && (
+              <div className="text-center">
+                <p className="text-xs text-gray-500">
+                  Text available - click "Show Text" to view
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          // Show text content
+          <div className="space-y-3">
+            <div>
+              <p className={cn(
+                "text-gray-700",
+                !isExpanded && "line-clamp-3"
+              )}>
+                {page.original_text}
+              </p>
+              {page.original_text.length > 200 && (
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="text-blue-600 hover:text-blue-500 text-sm mt-1"
+                >
+                  {isExpanded ? 'Show less' : 'Show more'}
+                </button>
+              )}
+            </div>
+
+            {page.translated_text && (
+              <div className="p-3 bg-gray-50 rounded">
+                <p className="text-sm text-gray-600 font-medium">Translation:</p>
+                <p className="text-gray-700 mt-1">{page.translated_text}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-3 text-xs text-gray-500">
+          Created: {new Date(page.created_at).toLocaleDateString()}
+          {page.updated_at !== page.created_at && (
+            <span className="ml-2">
+              Updated: {new Date(page.updated_at).toLocaleDateString()}
+            </span>
+          )}
         </div>
       </div>
     </div>
