@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Search as SearchIcon, Filter, X, Book } from 'lucide-react';
+import { Search as SearchIcon, Book, X } from 'lucide-react';
 import { useBookStore } from '../lib/store';
 import { apiClient } from '../lib/api';
 import { cn } from '../lib/utils';
-
-
 
 export default function Search() {
   const { books } = useBookStore();
@@ -91,10 +89,9 @@ export default function Search() {
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900">Search Books</h1>
         <p className="mt-2 text-gray-600">
-          Search through your Arabic book collection using English, Bahasa Indonesia, or Arabic queries
+          Search through your Arabic book collection
         </p>
       </div>
-
 
       {/* Search Interface */}
       <div className="bg-white shadow rounded-lg p-6">
@@ -122,7 +119,7 @@ export default function Search() {
                 onChange={(e) => setSearchType(e.target.value)}
                 className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="multilingual">Multilingual Search (Recommended)</option>
+                <option value="multilingual">Multilingual Search</option>
                 <option value="semantic">Semantic Search</option>
                 <option value="text">Text Search</option>
               </select>
@@ -179,9 +176,6 @@ export default function Search() {
             <h2 className="text-lg font-medium text-gray-900">
               Search Results ({searchResults.length})
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Found {searchResults.length} results for "{query}"
-            </p>
           </div>
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -203,25 +197,13 @@ export default function Search() {
           </p>
         </div>
       )}
-
-      {/* Instructions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-medium text-blue-800 mb-3">Search Tips</h3>
-        <ul className="list-disc list-inside space-y-2 text-sm text-blue-700">
-          <li><strong>Multilingual Search (Recommended):</strong> Search Arabic content using English or Bahasa Indonesia. Automatically detects your query language and finds relevant Arabic text.</li>
-          <li><strong>Semantic Search:</strong> Finds content based on meaning and context in the same language</li>
-          <li><strong>Text Search:</strong> Finds exact text matches in your books</li>
-          <li>Use the book filter to search within specific books</li>
-          <li><strong>Language Detection:</strong> The system automatically detects if you're searching in English, Bahasa Indonesia, or Arabic</li>
-          <li>Try queries like "hadis tentang niat" or "hadith about intention" to find Arabic content</li>
-        </ul>
-      </div>
     </div>
   );
 }
 
 function SearchResultCard({ result }) {
   const [showText, setShowText] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const {
     page_id,
     book_id,
@@ -251,19 +233,14 @@ function SearchResultCard({ result }) {
               by {book_author} • Page {page_number}
             </div>
 
-            {/* Badges */}
-            <div className="flex items-center space-x-2 mt-2">
-              {page_image_url && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  Has Image
-                </span>
-              )}
-              {similarity_score && (
+            {/* Similarity Score */}
+            {similarity_score && (
+              <div className="mt-2">
                 <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                   {(similarity_score * 100).toFixed(1)}% match
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -272,9 +249,9 @@ function SearchResultCard({ result }) {
           <div className="mt-3">
             <button
               onClick={() => setShowText(!showText)}
-              className="text-xs text-blue-600 hover:text-blue-500 font-medium"
+              className="text-sm text-blue-600 hover:text-blue-500 font-medium px-3 py-1 rounded-md border border-blue-200 hover:bg-blue-50"
             >
-              {showText ? "👁️ Show Image" : "📝 Show Text"}
+              {showText ? "Show Image" : "Show Text"}
             </button>
           </div>
         )}
@@ -283,39 +260,83 @@ function SearchResultCard({ result }) {
       {/* Content Area */}
       <div className="p-4">
         {page_image_url && !showText ? (
-          // Show image preview
+          // Show large image preview
           <div className="bg-gray-50 rounded-lg overflow-hidden">
             <img
               src={page_image_url}
               alt={`Page ${page_number} from ${book_title}`}
-              className="w-full h-auto max-h-80 object-contain"
+              className="w-full h-auto min-h-[500px] max-h-[800px] object-contain cursor-zoom-in hover:scale-105 transition-transform duration-200"
               onError={(e) => {
                 e.target.style.display = 'none';
                 setShowText(true);
               }}
+              onClick={() => setShowModal(true)}
             />
           </div>
         ) : (
-          // Show text content
-          <div className="space-y-3">
+          // Show full text content
+          <div className="space-y-4">
             <div>
-              <p className="text-sm text-gray-700 line-clamp-4 leading-relaxed">
-                {snippet || original_text.substring(0, 300) + (original_text.length > 300 ? '...' : '')}
-              </p>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Original Text:</h4>
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  {original_text}
+                </p>
+              </div>
             </div>
 
-            {/* Translation if available */}
-            {(en_translation || id_translation) && (
-              <div className="p-3 bg-blue-50 rounded-md">
-                <p className="text-xs font-medium text-blue-700 mb-1">Translation:</p>
-                <p className="text-sm text-blue-800 line-clamp-3 leading-relaxed">
-                  {(en_translation || id_translation).substring(0, 200) + ((en_translation || id_translation).length > 200 ? '...' : '')}
-                </p>
+            {/* English Translation if available */}
+            {en_translation && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">English Translation:</h4>
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-800 leading-relaxed whitespace-pre-wrap">
+                    {en_translation}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Indonesian Translation if available */}
+            {id_translation && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Indonesian Translation:</h4>
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <p className="text-sm text-green-800 leading-relaxed whitespace-pre-wrap">
+                    {id_translation}
+                  </p>
+                </div>
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* Image Modal */}
+      {showModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowModal(false)}
+        >
+          <div 
+            className="relative max-w-7xl max-h-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-4 right-4 text-white hover:text-gray-300 bg-black bg-opacity-50 rounded-full p-2 z-10"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={page_image_url}
+              alt={`Page ${page_number} from ${book_title}`}
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
