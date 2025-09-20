@@ -13,6 +13,7 @@ class SearchService:
     def __init__(self):
         self.default_similarity_threshold = 0.7
         self.default_limit = 10
+        self.multilingual_threshold = 0.6  # Lower threshold for cross-language search
     
     async def semantic_search(
         self,
@@ -111,7 +112,116 @@ class SearchService:
         except Exception as e:
             logger.error(f"Error performing semantic search: {str(e)}")
             return []
-    
+
+    async def multilingual_search(
+        self,
+        db: Session,
+        query: str,
+        query_language: Optional[str] = None,
+        limit: Optional[int] = None,
+        similarity_threshold: Optional[float] = None
+    ) -> List[SearchResult]:
+        """
+        Perform enhanced multilingual semantic search.
+        Optimized for cross-language queries (English/Bahasa -> Arabic content).
+
+        Args:
+            db: Database session
+            query: Search query text in any language
+            query_language: Language of the query ('en', 'id', 'ar', or 'auto')
+            limit: Maximum number of results to return
+            similarity_threshold: Minimum similarity score for results
+
+        Returns:
+            List of search results ordered by similarity score
+        """
+        try:
+            # Set defaults for multilingual search
+            limit = limit or self.default_limit
+            similarity_threshold = similarity_threshold or self.multilingual_threshold
+
+            logger.info(f"Performing multilingual search for query: '{query}' in language: {query_language or 'auto'}")
+            print(f"MULTILINGUAL SEARCH: Query: '{query}', Language: {query_language or 'auto'}, Threshold: {similarity_threshold}")
+
+            # Generate embedding for the query (OpenAI embeddings are naturally multilingual)
+            query_embedding = await embedding_service.generate_embedding(query)
+            logger.info(f"Generated multilingual query embedding: {len(query_embedding) if query_embedding else 0} dimensions")
+
+            if not query_embedding:
+                logger.error("Failed to generate embedding for multilingual search query")
+                return []
+
+            # Enhanced SQL query that searches across original text and translations
+            sql_query = text("""
+                SELECT
+                    p.id,
+                    p.book_id,
+                    p.page_number,
+                    p.original_text,
+                    p.en_translation,
+                    p.id_translation,
+                    p.embedding_model,
+                    b.title as book_title,
+                    b.author as book_author,
+                    1 - (p.embedding_vector <=> CAST(:query_embedding AS vector)) as similarity_score,
+                    CASE
+                        WHEN p.en_translation IS NOT NULL AND p.en_translation != '' THEN 'with_translation'
+                        WHEN p.id_translation IS NOT NULL AND p.id_translation != '' THEN 'with_id_translation'
+                        ELSE 'original_only'
+                    END as content_type
+                FROM pages p
+                JOIN books b ON p.book_id = b.id
+                WHERE p.embedding_vector IS NOT NULL
+                    AND 1 - (p.embedding_vector <=> CAST(:query_embedding AS vector)) >= :similarity_threshold
+                ORDER BY p.embedding_vector <=> CAST(:query_embedding AS vector)
+                LIMIT :limit
+            """)
+
+            result = db.execute(
+                sql_query,
+                {
+                    "query_embedding": query_embedding,
+                    "similarity_threshold": similarity_threshold,
+                    "limit": limit
+                }
+            )
+
+            rows = result.fetchall()
+            logger.info(f"Multilingual search returned {len(rows)} results")
+            print(f"MULTILINGUAL SEARCH: Found {len(rows)} results")
+
+            # Convert to SearchResult objects with enhanced snippet generation
+            search_results = []
+            for row in rows:
+                # Generate multilingual snippet
+                snippet = self._generate_multilingual_snippet(
+                    row.original_text,
+                    row.en_translation,
+                    row.id_translation,
+                    query,
+                    query_language
+                )
+
+                search_result = SearchResult(
+                    page_id=row.id,
+                    book_id=row.book_id,
+                    page_number=row.page_number,
+                    original_text=row.original_text,
+                    en_translation=row.en_translation,
+                    id_translation=row.id_translation,
+                    similarity_score=float(row.similarity_score),
+                    snippet=snippet,
+                    book_title=row.book_title,
+                    book_author=row.book_author
+                )
+                search_results.append(search_result)
+
+            return search_results
+
+        except Exception as e:
+            logger.error(f"Error performing multilingual search: {str(e)}")
+            return []
+
     async def text_search(
         self,
         db: Session,
@@ -211,7 +321,76 @@ class SearchService:
         except Exception as e:
             logger.error(f"Error generating snippet: {str(e)}")
             return text[:max_length] + "..." if len(text) > max_length else text
-    
+
+    def _generate_multilingual_snippet(
+        self,
+        original_text: str,
+        en_translation: Optional[str],
+        id_translation: Optional[str],
+        query: str,
+        query_language: Optional[str] = None,
+        max_length: int = 200
+    ) -> str:
+        """
+        Generate a snippet optimized for multilingual search results.
+        Prioritizes translated content when available for cross-language queries.
+
+        Args:
+            original_text: Original Arabic text
+            en_translation: English translation (if available)
+            id_translation: Indonesian translation (if available)
+            query: Search query
+            query_language: Language of the query
+            max_length: Maximum length of the snippet
+
+        Returns:
+            Optimized snippet for multilingual display
+        """
+        try:
+            # Determine best text to use for snippet based on query language
+            snippet_text = original_text
+            snippet_prefix = ""
+
+            # If query is likely in English and we have English translation
+            if query_language == 'en' or (query_language is None and self._is_english(query)):
+                if en_translation and en_translation.strip():
+                    snippet_text = en_translation
+                    snippet_prefix = "[EN] "
+                elif id_translation and id_translation.strip():
+                    snippet_text = id_translation
+                    snippet_prefix = "[ID] "
+
+            # If query is likely in Indonesian and we have Indonesian translation
+            elif query_language == 'id' or (query_language is None and self._is_indonesian(query)):
+                if id_translation and id_translation.strip():
+                    snippet_text = id_translation
+                    snippet_prefix = "[ID] "
+                elif en_translation and en_translation.strip():
+                    snippet_text = en_translation
+                    snippet_prefix = "[EN] "
+
+            # Generate the snippet from the selected text
+            base_snippet = self._generate_snippet(snippet_text, query, max_length - len(snippet_prefix))
+            return snippet_prefix + base_snippet
+
+        except Exception as e:
+            logger.error(f"Error generating multilingual snippet: {str(e)}")
+            return self._generate_snippet(original_text, query, max_length)
+
+    def _is_english(self, text: str) -> bool:
+        """Simple heuristic to detect if text is likely English."""
+        english_words = {'the', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
+        words = text.lower().split()
+        english_count = sum(1 for word in words if word in english_words)
+        return len(words) > 0 and (english_count / len(words)) > 0.2
+
+    def _is_indonesian(self, text: str) -> bool:
+        """Simple heuristic to detect if text is likely Indonesian."""
+        indonesian_words = {'dan', 'atau', 'yang', 'di', 'ke', 'dari', 'untuk', 'dengan', 'pada', 'adalah'}
+        words = text.lower().split()
+        indonesian_count = sum(1 for word in words if word in indonesian_words)
+        return len(words) > 0 and (indonesian_count / len(words)) > 0.2
+
     async def get_similar_pages(
         self,
         db: Session,

@@ -42,12 +42,40 @@ class EmbeddingService:
             )
             
             embedding = response.data[0].embedding
-            
+
+            # Ensure embedding is a proper list of floats
+            if isinstance(embedding, str):
+                logger.error(f"Received string embedding instead of list: {embedding[:100]}...")
+                try:
+                    import json
+                    embedding = json.loads(embedding)
+                    logger.info("Successfully parsed string embedding to list")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse string embedding: {str(e)}")
+                    return None
+
+            # Convert to list if it's not already
+            if not isinstance(embedding, list):
+                try:
+                    embedding = list(embedding)
+                    logger.info(f"Converted embedding from {type(response.data[0].embedding)} to list")
+                except Exception as e:
+                    logger.error(f"Failed to convert embedding to list: {str(e)}")
+                    return None
+
             # Validate embedding dimension
             if len(embedding) != self.dimension:
                 logger.error(f"Unexpected embedding dimension: {len(embedding)}, expected: {self.dimension}")
                 return None
-                
+
+            # Ensure all elements are floats
+            try:
+                embedding = [float(x) for x in embedding]
+                logger.debug(f"Embedding conversion successful: {len(embedding)} floats")
+            except (ValueError, TypeError) as e:
+                logger.error(f"Failed to convert embedding elements to floats: {str(e)}")
+                return None
+
             return embedding
             
         except Exception as e:

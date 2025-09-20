@@ -34,6 +34,43 @@ async def semantic_search(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
 
+@router.post("/multilingual", response_model=SearchResponse)
+async def multilingual_search(
+    request: SearchRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Perform enhanced multilingual semantic search.
+    Optimized for cross-language queries (English/Bahasa -> Arabic content).
+
+    Request body should include:
+    - query: Search text in any language
+    - query_language: 'en', 'id', 'ar', or None for auto-detection
+    - limit: Maximum number of results (default: 10)
+    - similarity_threshold: Minimum similarity score (default: 0.6 for multilingual)
+    """
+    try:
+        print(f"ROUTER: Multilingual search called with query: '{request.query}', language: {request.query_language}")
+
+        results = await search_service.multilingual_search(
+            db=db,
+            query=request.query,
+            query_language=request.query_language,
+            limit=request.limit,
+            similarity_threshold=request.similarity_threshold
+        )
+
+        print(f"ROUTER: Multilingual search returned {len(results)} results")
+
+        return SearchResponse(
+            query=request.query,
+            results=results,
+            total_results=len(results)
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Multilingual search failed: {str(e)}")
+
 @router.post("/text", response_model=SearchResponse)
 async def text_search(
     request: SearchRequest,

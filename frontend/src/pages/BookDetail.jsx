@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { useBookStore, usePageStore } from '../lib/store';
 
 import { cn } from '../lib/utils';
@@ -22,7 +22,6 @@ export default function BookDetail() {
   const [uploadErrors, setUploadErrors] = useState({});
   const [uploadSuccess, setUploadSuccess] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [useOcr, setUseOcr] = useState(false);
   
   const book = books.find(b => b.id === bookId);
   const bookPages = pages.filter(p => p.book_id === bookId);
@@ -85,7 +84,6 @@ export default function BookDetail() {
     selectedFiles.forEach(file => {
       formData.append('files', file);
     });
-    formData.append('use_ocr', useOcr.toString());
     
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/books/${bookId}/upload-files`, {
@@ -97,7 +95,7 @@ export default function BookDetail() {
         throw new Error('Upload failed');
       }
       
-      const result = await response.json();
+      await response.json();
       setUploadSuccess(selectedFiles.map(f => f.name));
       setSelectedFiles([]);
       
@@ -278,7 +276,7 @@ export default function BookDetail() {
 
       {/* File Upload Modal */}
       {showFileUploadForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 -top-6">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold">Upload Files to {book?.title}</h2>
@@ -386,23 +384,28 @@ export default function BookDetail() {
               </div>
             )}
 
-            {/* OCR Option */}
-            <div className="mt-6">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={useOcr}
-                  onChange={(e) => setUseOcr(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  disabled={isUploading}
-                />
-                <span className="text-sm text-gray-700">
-                  Use OCR for scanned documents (images embedded in PDFs)
-                </span>
-              </label>
-              <p className="text-xs text-gray-500 mt-1">
-                Enable this option if your PDF contains scanned images rather than selectable text
-              </p>
+            {/* Smart Processing Info */}
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-blue-800">Smart Processing Enabled</h4>
+                  <p className="text-xs text-blue-700 mt-1">
+                    Files will be automatically processed using the best method for each page:
+                  </p>
+                  <ul className="text-xs text-blue-700 mt-2 space-y-1 list-disc list-inside">
+                    <li>Text extraction for pages with selectable text</li>
+                    <li>OCR for image-only pages automatically</li>
+                    <li>Mixed processing for documents with both types</li>
+                  </ul>
+                </div>
+              </div>
             </div>
 
             {/* Upload Button */}

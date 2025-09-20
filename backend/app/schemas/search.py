@@ -6,6 +6,7 @@ class SearchRequest(BaseModel):
     query: str
     limit: Optional[int] = 10
     similarity_threshold: Optional[float] = 0.7
+    query_language: Optional[str] = None  # 'en', 'id', 'ar', or None for auto-detection
 
 class SearchResult(BaseModel):
     page_id: int

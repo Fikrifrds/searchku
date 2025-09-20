@@ -40,13 +40,28 @@ async def create_page(
     embedding_vector = None
     if page_data.original_text:
         embedding_vector = await embedding_service.generate_embedding(page_data.original_text)
-    
+
+    # Ensure embedding_vector is properly formatted for pgvector
+    formatted_embedding = None
+    if embedding_vector is not None:
+        if isinstance(embedding_vector, (list, tuple)):
+            # Convert to list of floats to ensure proper format
+            try:
+                formatted_embedding = [float(x) for x in embedding_vector]
+                logger.info(f"Converted embedding vector to list of {len(formatted_embedding)} floats")
+            except (ValueError, TypeError) as e:
+                logger.error(f"Failed to convert embedding vector to floats: {str(e)}")
+                formatted_embedding = None
+        else:
+            logger.error(f"Embedding vector is not a list/tuple: {type(embedding_vector)} - {embedding_vector}")
+            formatted_embedding = None
+
     db_page = Page(
         book_id=book_id,
         page_number=page_data.page_number,
         original_text=page_data.original_text,
         embedding_model=embedding_service.model,
-        embedding_vector=embedding_vector
+        embedding_vector=formatted_embedding
     )
     db.add(db_page)
     db.commit()
@@ -124,7 +139,21 @@ async def update_page(
         # Regenerate embedding when original_text changes
         if page_data.original_text:
             embedding_vector = await embedding_service.generate_embedding(page_data.original_text)
-            page.embedding_vector = embedding_vector
+            # Ensure embedding_vector is properly formatted for pgvector
+            formatted_embedding = None
+            if embedding_vector is not None:
+                if isinstance(embedding_vector, (list, tuple)):
+                    # Convert to list of floats to ensure proper format
+                    try:
+                        formatted_embedding = [float(x) for x in embedding_vector]
+                        logger.info(f"Converted embedding vector to list of {len(formatted_embedding)} floats")
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Failed to convert embedding vector to floats: {str(e)}")
+                        formatted_embedding = None
+                else:
+                    logger.error(f"Embedding vector is not a list/tuple: {type(embedding_vector)} - {embedding_vector}")
+                    formatted_embedding = None
+            page.embedding_vector = formatted_embedding
             page.embedding_model = embedding_service.model
         else:
             page.embedding_vector = None
@@ -165,7 +194,6 @@ async def delete_page(
 async def upload_files_bulk(
     book_id: int,
     files: List[UploadFile] = File(...),
-    use_ocr: bool = Form(False),
     db: Session = Depends(get_db)
 ):
     """Upload and process multiple files (PDF, DOC, DOCX) for a book.
@@ -173,14 +201,16 @@ async def upload_files_bulk(
     This endpoint:
     1. Validates the book exists
     2. Processes each uploaded file to extract text
-    3. Splits content into pages
-    4. Generates embeddings for each page
-    5. Stores pages with embeddings in the database
+    3. Automatically detects which pages need OCR (image-only pages)
+    4. Uses text extraction for pages with extractable text
+    5. Uses OCR for image-only pages
+    6. Splits content into pages
+    7. Generates embeddings for each page
+    8. Stores pages with embeddings in the database
 
     Args:
         book_id: ID of the book to add pages to
         files: List of files to upload and process
-        use_ocr: Whether to use OCR for scanned PDFs (default: False)
     """
     # Check if book exists
     book = db.query(Book).filter(Book.id == book_id).first()
@@ -213,10 +243,10 @@ async def upload_files_bulk(
             file_content = await file.read()
             logger.info(f"File content read successfully, size: {len(file_content)} bytes")
             
-            # Process file using file service
-            logger.info(f"Starting text extraction for: {file.filename} (use_ocr: {use_ocr})")
+            # Process file using file service with automatic OCR detection
+            logger.info(f"Starting intelligent text extraction for: {file.filename}")
             page_data_list = await file_service.process_bulk_text_upload(
-                file_content, file.filename, use_ocr
+                file_content, file.filename
             )
             logger.info(f"Text extraction completed. Pages found: {len(page_data_list)}")
             
@@ -245,6 +275,9 @@ async def upload_files_bulk(
                     try:
                         embedding_vector = await embedding_service.generate_embedding(page_data['text'])
                         logger.info(f"Embedding generated successfully for page {current_page_number}")
+                        logger.debug(f"Embedding type: {type(embedding_vector)}, length: {len(embedding_vector) if embedding_vector else 'None'}")
+                        if embedding_vector and len(embedding_vector) > 0:
+                            logger.debug(f"First few elements: {embedding_vector[:3] if len(embedding_vector) >= 3 else embedding_vector}")
                     except Exception as e:
                         logger.error(f"Failed to generate embedding for page {current_page_number}: {str(e)}")
                         raise e
@@ -253,14 +286,46 @@ async def upload_files_bulk(
                 
                 # Create page in database
                 logger.info(f"Saving page {current_page_number} to database")
+
+                # Ensure embedding_vector is properly formatted for pgvector
+                formatted_embedding = None
+                if embedding_vector is not None:
+                    logger.debug(f"Processing embedding vector of type: {type(embedding_vector)}")
+
+                    # Handle string representations
+                    if isinstance(embedding_vector, str):
+                        logger.warning(f"Embedding vector is a string, attempting to parse: {embedding_vector[:100]}...")
+                        try:
+                            import json
+                            embedding_vector = json.loads(embedding_vector)
+                            logger.info("Successfully parsed string embedding to list")
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Failed to parse string embedding: {str(e)}")
+                            formatted_embedding = None
+
+                    if isinstance(embedding_vector, (list, tuple)):
+                        # Convert to list of floats to ensure proper format
+                        try:
+                            formatted_embedding = [float(x) for x in embedding_vector]
+                            logger.info(f"Converted embedding vector to list of {len(formatted_embedding)} floats")
+                            logger.debug(f"Sample values: {formatted_embedding[:3] if len(formatted_embedding) >= 3 else formatted_embedding}")
+                        except (ValueError, TypeError) as e:
+                            logger.error(f"Failed to convert embedding vector to floats: {str(e)}")
+                            logger.error(f"Problematic data: {embedding_vector[:5] if hasattr(embedding_vector, '__getitem__') else embedding_vector}")
+                            formatted_embedding = None
+                    else:
+                        logger.error(f"Embedding vector is not a list/tuple/string: {type(embedding_vector)}")
+                        logger.error(f"Value: {str(embedding_vector)[:200]}...")
+                        formatted_embedding = None
+
                 db_page = Page(
                     book_id=book_id,
                     page_number=current_page_number,
                     original_text=page_data.get('text', ''),
                     embedding_model=embedding_service.model,
-                    embedding_vector=embedding_vector
+                    embedding_vector=formatted_embedding
                 )
-                
+
                 db.add(db_page)
                 pages_created.append({
                     "page_number": current_page_number,
@@ -269,8 +334,14 @@ async def upload_files_bulk(
                 logger.info(f"Page {current_page_number} added to session")
             
             logger.info(f"Committing {len(pages_created)} pages to database")
-            db.commit()
-            logger.info(f"Successfully committed {len(pages_created)} pages to database")
+            try:
+                db.commit()
+                logger.info(f"Successfully committed {len(pages_created)} pages to database")
+            except Exception as commit_error:
+                logger.error(f"Error committing pages to database: {str(commit_error)}")
+                logger.error(f"Commit error type: {type(commit_error).__name__}")
+                db.rollback()
+                raise commit_error
             
             results.append({
                 "filename": file.filename,

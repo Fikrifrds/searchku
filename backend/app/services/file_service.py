@@ -348,15 +348,14 @@ class FileService:
             logger.error(f"Error during PyMuPDF text extraction: {str(e)}")
             return ""
 
-    async def _extract_text_from_file(self, content: bytes, content_type: str, filename: str, use_ocr: bool = False) -> str:
+    async def _extract_text_from_file(self, content: bytes, content_type: str, filename: str) -> str:
         """
-        Extract text from different file types.
+        Extract text from different file types (non-PDF files).
 
         Args:
             content: The file content as bytes
             content_type: The MIME type of the file
             filename: The original filename
-            use_ocr: Whether to use OCR for scanned PDFs (default: False)
 
         Returns:
             Extracted text content
@@ -374,96 +373,6 @@ class FileService:
                             status_code=400,
                             detail="File must be UTF-8 encoded"
                         )
-            
-            elif content_type == "application/pdf":
-                # Handle PDF files with OCR fallback
-                try:
-                    logger.info("Starting PDF text extraction...")
-                    pdf_bytes = io.BytesIO(content)
-                    pdf_reader = PdfReader(pdf_bytes)
-                    logger.info(f"PDF successfully loaded with {len(pdf_reader.pages)} pages")
-
-                    # Check if PDF is encrypted
-                    if pdf_reader.is_encrypted:
-                        logger.warning("PDF is encrypted, attempting to decrypt...")
-                        try:
-                            pdf_reader.decrypt("")  # Try with empty password
-                        except Exception as decrypt_error:
-                            logger.error(f"Failed to decrypt PDF: {str(decrypt_error)}")
-                            raise HTTPException(
-                                status_code=400,
-                                detail="PDF is password protected and cannot be processed"
-                            )
-                    text_content = ""
-
-                    # First try PyPDF2 text extraction with better encoding handling
-                    for i, page in enumerate(pdf_reader.pages):
-                        try:
-                            logger.info(f"Processing page {i+1}...")
-                            page_text = page.extract_text()
-                            logger.info(f"Raw page text length: {len(page_text) if page_text else 0}")
-
-                            # Clean up potential encoding issues
-                            if page_text:
-                                # Try to handle potential encoding issues with Arabic text
-                                page_text = page_text.encode('utf-8', errors='ignore').decode('utf-8')
-                                logger.info(f"Page {i+1} after encoding cleanup: {len(page_text)} characters")
-                                # Log first 100 characters for debugging
-                                if page_text.strip():
-                                    logger.info(f"Page {i+1} sample text: {page_text[:100]}...")
-
-                            if page_text and page_text.strip():
-                                text_content += page_text + "\n\n\n"
-                                logger.info(f"Page {i+1} added to content")
-                            else:
-                                logger.warning(f"Page {i+1} has no extractable text")
-                        except Exception as e:
-                            logger.error(f"Error extracting text from page {i+1}: {str(e)}")
-                            logger.error(f"Page {i+1} error type: {type(e).__name__}")
-                            continue
-
-                    logger.info(f"Total extracted text length with PyPDF2: {len(text_content)}")
-                    if text_content.strip():
-                        logger.info(f"Sample of extracted text: {text_content[:200]}...")
-
-                    # If no text was extracted with PyPDF2, try PyMuPDF
-                    if not text_content.strip():
-                        logger.info("No text extracted with PyPDF2, trying PyMuPDF...")
-                        text_content = await self._extract_text_with_pymupdf(content)
-                        logger.info(f"PyMuPDF extracted text length: {len(text_content)}")
-
-                    # If still no text and OCR is enabled, try OCR
-                    if not text_content.strip() and use_ocr:
-                        logger.info("No text extracted with PDF libraries, attempting OCR...")
-                        text_content = await self._extract_text_with_ocr(content)
-                        logger.info(f"OCR extracted text length: {len(text_content)}")
-
-                    if not text_content.strip():
-                        if use_ocr:
-                            logger.error("No text could be extracted from PDF even with OCR")
-                            raise HTTPException(
-                                status_code=400,
-                                detail="No text could be extracted from PDF. The file might be corrupted or contain no readable content."
-                            )
-                        else:
-                            logger.error("No text could be extracted from PDF. Try enabling OCR for scanned documents.")
-                            raise HTTPException(
-                                status_code=400,
-                                detail="No text could be extracted from PDF. This might be a scanned document - try enabling OCR option."
-                            )
-
-                    return text_content.strip()
-                except HTTPException:
-                    raise
-                except Exception as e:
-                    logger.error(f"Error extracting text from PDF: {str(e)}")
-                    logger.error(f"PDF extraction error type: {type(e).__name__}")
-                    import traceback
-                    logger.error(f"PDF extraction traceback: {traceback.format_exc()}")
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Failed to extract text from PDF file: {str(e)}"
-                    )
             
             elif content_type in ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"]:
                 # Handle Word documents
@@ -495,18 +404,187 @@ class FileService:
                 status_code=500,
                 detail="Failed to extract text from file"
             )
-    
-    async def process_bulk_text_upload(self, content: bytes, filename: str, use_ocr: bool = False) -> list:
+
+    async def _process_pdf_with_smart_ocr(self, content: bytes, filename: str) -> list:
+        """
+        Process PDF with intelligent OCR detection per page.
+        Uses text extraction for readable pages and OCR for image-only pages.
+
+        Args:
+            content: The PDF file content as bytes
+            filename: The original filename
+
+        Returns:
+            List of page data dictionaries with 'text' and 'extraction_method' keys
+        """
+        try:
+            logger.info(f"Starting intelligent PDF processing for: {filename}")
+            pages = []
+
+            # Open PDF with PyMuPDF for better page handling
+            pdf_document = fitz.open(stream=content, filetype="pdf")
+            logger.info(f"PDF opened with {pdf_document.page_count} pages")
+
+            # Check if PDF is encrypted
+            if pdf_document.needs_pass:
+                logger.warning("PDF is encrypted, attempting to decrypt...")
+                try:
+                    pdf_document.authenticate("")  # Try with empty password
+                except Exception as decrypt_error:
+                    logger.error(f"Failed to decrypt PDF: {str(decrypt_error)}")
+                    pdf_document.close()
+                    raise HTTPException(
+                        status_code=400,
+                        detail="PDF is password protected and cannot be processed"
+                    )
+
+            # Process each page individually
+            for page_num in range(pdf_document.page_count):
+                try:
+                    logger.info(f"Processing page {page_num + 1}/{pdf_document.page_count}")
+                    page = pdf_document[page_num]
+
+                    # First, try to extract text using PyMuPDF
+                    page_text = page.get_text()
+                    text_length = len(page_text.strip()) if page_text else 0
+
+                    # Determine if the page has meaningful text
+                    # Consider a page to have text if it has more than 50 characters of non-whitespace content
+                    has_meaningful_text = text_length > 50
+
+                    # Also check for common non-text content indicators
+                    if has_meaningful_text:
+                        # Remove common PDF artifacts and see if substantial text remains
+                        cleaned_text = page_text.strip()
+                        # Remove page numbers, headers, footers (very short lines)
+                        lines = [line.strip() for line in cleaned_text.split('\n') if line.strip()]
+                        substantial_lines = [line for line in lines if len(line) > 10]
+
+                        # If most lines are very short, it might be metadata/artifacts
+                        if len(substantial_lines) < len(lines) * 0.3:
+                            has_meaningful_text = False
+                        else:
+                            # Check for actual content
+                            text_sample = ' '.join(substantial_lines[:5])
+                            if len(text_sample) < 30:
+                                has_meaningful_text = False
+
+                    if has_meaningful_text:
+                        # Use extracted text
+                        logger.info(f"Page {page_num + 1}: Using text extraction ({text_length} characters)")
+                        cleaned_text = page_text.strip()
+                        if cleaned_text:
+                            pages.append({
+                                'text': cleaned_text,
+                                'extraction_method': 'text_extraction',
+                                'page_number': page_num + 1
+                            })
+
+                    else:
+                        # Page appears to be image-only, use OCR
+                        logger.info(f"Page {page_num + 1}: No meaningful text found, using OCR")
+
+                        try:
+                            # Get page as image for OCR
+                            pix = page.get_pixmap(dpi=400)
+                            img_data = pix.tobytes("png")
+
+                            # Convert to PIL Image and enhance for OCR
+                            from PIL import Image, ImageEnhance, ImageFilter
+                            img = Image.open(io.BytesIO(img_data))
+
+                            if img.mode != 'L':
+                                img = img.convert('L')
+
+                            # Enhance image
+                            enhancer = ImageEnhance.Contrast(img)
+                            img = enhancer.enhance(1.2)
+                            enhancer = ImageEnhance.Sharpness(img)
+                            img = enhancer.enhance(1.5)
+                            img = img.filter(ImageFilter.MedianFilter(size=3))
+
+                            # Resize if needed
+                            width, height = img.size
+                            if width < 1000 or height < 1000:
+                                scale_factor = max(1000/width, 1000/height)
+                                new_width = int(width * scale_factor)
+                                new_height = int(height * scale_factor)
+                                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+                            # Try multiple OCR configurations
+                            ocr_configs = [
+                                (r'--oem 3 --psm 6 -l ara -c preserve_interword_spaces=1', "PSM 6"),
+                                (r'--oem 3 --psm 1 -l ara -c preserve_interword_spaces=1', "PSM 1"),
+                                (r'--oem 3 --psm 7 -l ara -c preserve_interword_spaces=1', "PSM 7"),
+                            ]
+
+                            best_text = ""
+                            best_length = 0
+
+                            for config, desc in ocr_configs:
+                                try:
+                                    text_result = pytesseract.image_to_string(img, config=config)
+                                    if len(text_result.strip()) > best_length:
+                                        best_text = text_result
+                                        best_length = len(text_result.strip())
+                                        if best_length > 100:
+                                            break
+                                except Exception:
+                                    continue
+
+                            ocr_text = best_text.strip()
+                            if ocr_text:
+                                ocr_text = self._clean_arabic_ocr_text(ocr_text)
+
+                            if ocr_text and len(ocr_text) > 10:
+                                logger.info(f"Page {page_num + 1}: OCR extracted {len(ocr_text)} characters")
+                                pages.append({
+                                    'text': ocr_text,
+                                    'extraction_method': 'ocr',
+                                    'page_number': page_num + 1
+                                })
+                            else:
+                                logger.warning(f"Page {page_num + 1}: OCR produced no meaningful text")
+
+                        except Exception as ocr_error:
+                            logger.error(f"OCR failed for page {page_num + 1}: {str(ocr_error)}")
+
+                except Exception as page_error:
+                    logger.error(f"Error processing page {page_num + 1}: {str(page_error)}")
+
+            pdf_document.close()
+
+            # Filter out empty pages
+            valid_pages = [p for p in pages if p.get('text', '').strip()]
+            logger.info(f"PDF processing completed: {len(valid_pages)} valid pages out of {len(pages)} total pages")
+
+            # Log extraction method summary
+            text_extraction_count = len([p for p in valid_pages if p.get('extraction_method') == 'text_extraction'])
+            ocr_count = len([p for p in valid_pages if p.get('extraction_method') == 'ocr'])
+            logger.info(f"Extraction methods used - Text extraction: {text_extraction_count}, OCR: {ocr_count}")
+
+            return valid_pages
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error in smart PDF processing: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to process PDF file: {str(e)}"
+            )
+
+    async def process_bulk_text_upload(self, content: bytes, filename: str) -> list:
         """
         Process bulk text upload for pages. Supports .txt, .md, .pdf, .doc, and .docx files.
+        Automatically detects which pages need OCR and which can use direct text extraction.
 
         Args:
             content: The file content as bytes
             filename: The original filename
-            use_ocr: Whether to use OCR for scanned PDFs (default: False)
 
         Returns:
-            List of page data dictionaries with 'text' key
+            List of page data dictionaries with 'text' key and 'extraction_method' info
         """
         try:
             # Validate file size
@@ -520,46 +598,49 @@ class FileService:
             content_type = self._get_content_type_from_filename(filename)
             logger.info(f"Processing file {filename} with content type: {content_type}")
             
-            # Extract text based on file type
-            text_content = await self._extract_text_from_file(content, content_type, filename, use_ocr)
-            logger.info(f"Extracted text length: {len(text_content)} characters")
-            
-            # Split into pages based on file type
-            pages = []
-            
+            # Extract text based on file type with intelligent OCR detection
             if content_type == "application/pdf":
-                # For PDFs, split by the triple newlines we added during extraction
-                page_texts = text_content.split('\n\n\n')
-                logger.info(f"PDF split into {len(page_texts)} potential pages")
+                # Use intelligent PDF processing that detects OCR needs per page
+                pages = await self._process_pdf_with_smart_ocr(content, filename)
+                logger.info(f"PDF processing completed: {len(pages)} pages")
+                return pages
             else:
-                # For other text files, use different strategies
-                if '\n\n\n' in text_content:
-                    # If triple newlines exist, use them
-                    page_texts = text_content.split('\n\n\n')
-                elif '\f' in text_content:  # Form feed character (page break)
-                    page_texts = text_content.split('\f')
-                else:
-                    # Split by double newlines or create chunks of reasonable size
-                    if '\n\n' in text_content:
-                        page_texts = text_content.split('\n\n')
-                    else:
-                        # Create chunks of ~1000 characters
-                        chunk_size = 1000
-                        page_texts = [text_content[i:i+chunk_size] for i in range(0, len(text_content), chunk_size)]
-                
-                logger.info(f"Text file split into {len(page_texts)} potential pages")
+                # For non-PDF files, use regular text extraction
+                text_content = await self._extract_text_from_file(content, content_type, filename)
+                logger.info(f"Extracted text length: {len(text_content)} characters")
             
+            # Split into pages based on file type (for non-PDF files)
+            pages = []
+
+            # For other text files, use different strategies
+            if '\n\n\n' in text_content:
+                # If triple newlines exist, use them
+                page_texts = text_content.split('\n\n\n')
+            elif '\f' in text_content:  # Form feed character (page break)
+                page_texts = text_content.split('\f')
+            else:
+                # Split by double newlines or create chunks of reasonable size
+                if '\n\n' in text_content:
+                    page_texts = text_content.split('\n\n')
+                else:
+                    # Create chunks of ~1000 characters
+                    chunk_size = 1000
+                    page_texts = [text_content[i:i+chunk_size] for i in range(0, len(text_content), chunk_size)]
+
+            logger.info(f"Text file split into {len(page_texts)} potential pages")
+
             # Process each page
             for i, page_text in enumerate(page_texts):
                 cleaned_text = page_text.strip()
                 if cleaned_text and len(cleaned_text) > 10:  # Only add pages with substantial content
                     pages.append({
-                        'text': cleaned_text
+                        'text': cleaned_text,
+                        'extraction_method': 'text_extraction'
                     })
                     logger.debug(f"Added page {i+1} with {len(cleaned_text)} characters")
                 else:
                     logger.debug(f"Skipped page {i+1} - too short or empty")
-            
+
             logger.info(f"Final result: {len(pages)} pages created from {filename}")
             return pages
             
