@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, forwardRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle, Eye, Languages } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle, Eye, Languages, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useBookStore, usePageStore } from '../lib/store';
 import { apiClient } from '../lib/api';
 import { cn } from '../lib/utils';
@@ -102,6 +102,25 @@ export default function BookDetail() {
       });
     }
   }, [selectedPageNumber, bookPages.length]);
+
+  // Handle ESC key to close modals
+  useEffect(() => {
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape') {
+        if (showTranslationModal) {
+          setShowTranslationModal(false);
+        }
+        if (showFileUploadForm) {
+          setShowFileUploadForm(false);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleEscKey);
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+    };
+  }, [showTranslationModal, showFileUploadForm]);
 
   // Function to handle page navigation with URL update
   const handlePageSelect = (pageNumber) => {
@@ -581,7 +600,7 @@ export default function BookDetail() {
 
             {/* Right side - Translation */}
             <div className="flex-1 p-6 bg-gray-50">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold text-gray-900">Indonesian Translation</h3>
                 <button
                   onClick={() => setShowTranslationModal(false)}
@@ -591,7 +610,7 @@ export default function BookDetail() {
                 </button>
               </div>
 
-              <div className="h-full overflow-y-auto">
+              <div className="overflow-y-auto">
                 {isTranslating ? (
                   <div className="flex items-center justify-center h-32">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>

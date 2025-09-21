@@ -53,25 +53,29 @@ class TranslationService:
         target_lang_name = language_names[target_language]
 
         prompt = f"""
-Translate the following Arabic text to {target_lang_name}.
+You are translating Islamic scholarly text. This requires ABSOLUTE ACCURACY with no interpretations, opinions, or assumptions.
 
-CRITICAL TRANSLATION AND FORMATTING RULES:
-1. Translate ONLY what is written in the provided text - do not add any external content
-2. If text appears to be cut off or incomplete, translate only what is visible - do not complete or guess the missing parts
-3. Do not add explanations, context, or any text that is not in the original
+SCHOLARLY TRANSLATION REQUIREMENTS:
+1. This is Islamic religious scholarship - accuracy is paramount
+2. Translate ONLY the exact Arabic words provided - no additions, interpretations, or explanations
+3. Use precise, literal translation without personal opinions or assumptions
+4. If you are uncertain about any word or phrase, translate it as literally as possible
+5. Do not add commentary, context, or explanatory text
+6. Preserve all Islamic terminology accurately (names, places, religious terms)
+7. If text appears incomplete, translate only what is visible - never guess or complete
 
 EXACT FORMATTING REQUIREMENTS:
-4. Preserve the EXACT line breaks and blank lines as shown in the original Arabic text
-5. If there are page numbers (like "- ١١ -"), translate them but keep them on separate lines with the same spacing
-6. Each hadith should be separated by blank lines just like in the original
-7. Hadith titles (like "الحديث الثالث عشر") should be on separate lines with proper spacing before and after
-8. Keep the chain of narration (إسناد) on separate lines as in the original
-9. Keep hadith text on separate lines maintaining the original line breaks
-10. Keep references (like "رواه البخاري") on separate lines with proper spacing
-11. Do not combine multiple lines into paragraphs - each line should remain separate
-12. Maintain the visual structure so it looks identical to the Arabic version when rendered
+8. Preserve the EXACT line breaks and blank lines as shown in the original Arabic text
+9. Keep page numbers (like "- ١١ -") on separate lines with identical spacing
+10. Each hadith must be separated by blank lines exactly as in the original
+11. Hadith titles (like "الحديث الثالث عشر") on separate lines with proper spacing
+12. Keep chains of narration (إسناد) on separate lines as in the original
+13. Maintain original line breaks within hadith text
+14. Keep references (like "رواه البخاري") on separate lines with proper spacing
+15. Do not combine lines into paragraphs - each line remains separate
+16. The visual structure must be identical to the Arabic version
 
-Provide ONLY the direct translation preserving the exact visual layout and spacing of the Arabic text.
+Provide ONLY the direct, literal, scholarly accurate translation with exact formatting.
 
 Arabic text:
 {text}
@@ -111,25 +115,30 @@ Arabic text:
 
         try:
             prompt = f"""
-Look at this image containing Arabic text and translate all the Arabic text you see to {target_lang_name}.
+You are translating Islamic scholarly text from an image. This requires ABSOLUTE ACCURACY with no interpretations, opinions, or assumptions.
 
-CRITICAL TRANSLATION AND FORMATTING RULES:
-1. Translate ONLY the Arabic text that is visible in the image - do not add any external content
-2. If text appears to be cut off at the edges or partially visible, translate only what you can clearly see - do not complete or guess the missing parts
-3. Do not add any explanations, context, interpretations, or text that is not actually written in the image
+SCHOLARLY TRANSLATION REQUIREMENTS:
+1. This is Islamic religious scholarship - accuracy is paramount
+2. Translate ONLY the exact Arabic text visible in the image - no additions, interpretations, or explanations
+3. Use precise, literal translation without personal opinions or assumptions
+4. If you are uncertain about any word or phrase, translate it as literally as possible
+5. Do not add commentary, context, or explanatory text that is not in the image
+6. Preserve all Islamic terminology accurately (names of companions, places, religious terms)
+7. If text appears cut off at edges, translate only what is clearly visible - never guess or complete
+8. Do not interpret abbreviated words or references - translate exactly as written
 
 EXACT FORMATTING REQUIREMENTS:
-4. Preserve the EXACT line breaks and blank lines as shown in the original Arabic text
-5. If there are page numbers (like "- ١١ -"), translate them but keep them on separate lines with the same spacing
-6. Each hadith should be separated by blank lines just like in the original
-7. Hadith titles (like "الحديث الثالث عشر") should be on separate lines with proper spacing before and after
-8. Keep the chain of narration (إسناد) on separate lines as in the original
-9. Keep hadith text on separate lines maintaining the original line breaks
-10. Keep references (like "رواه البخاري") on separate lines with proper spacing
-11. Do not combine multiple lines into paragraphs - each line should remain separate
-12. Maintain the visual structure so it looks identical to the Arabic version when rendered
+9. Preserve the EXACT line breaks and blank lines as shown in the original Arabic text
+10. Keep page numbers (like "- ١١ -") on separate lines with identical spacing
+11. Each hadith must be separated by blank lines exactly as in the original
+12. Hadith titles (like "الحديث الثالث عشر") on separate lines with proper spacing
+13. Keep chains of narration (إسناد) on separate lines as in the original
+14. Maintain original line breaks within hadith text
+15. Keep references (like "رواه البخاري") on separate lines with proper spacing
+16. Do not combine lines into paragraphs - each line remains separate
+17. The visual structure must be identical to the Arabic version
 
-Provide ONLY the direct translation preserving the exact visual layout and spacing of the Arabic text.
+Provide ONLY the direct, literal, scholarly accurate translation with exact formatting.
 
 Translate to {target_lang_name}:
 """

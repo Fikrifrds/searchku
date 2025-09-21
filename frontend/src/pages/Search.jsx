@@ -284,6 +284,20 @@ function SearchResultCard({ result, navigate }) {
     book_author
   } = result;
 
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape' && showModal) {
+        setShowModal(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscKey);
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+    };
+  }, [showModal]);
+
   const handleGoToDetail = () => {
     navigate(`/books/${book_id}?page=${page_number}`);
   };

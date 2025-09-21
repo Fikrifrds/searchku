@@ -167,6 +167,20 @@ function CreateBookModal({ onClose }) {
     description: ''
   });
 
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscKey);
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+    };
+  }, [onClose]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
