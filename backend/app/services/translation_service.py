@@ -55,14 +55,23 @@ class TranslationService:
         prompt = f"""
 Translate the following Arabic text to {target_lang_name}.
 
-IMPORTANT FORMATTING REQUIREMENTS:
-1. Preserve the EXACT line breaks and spacing as shown in the original Arabic text
-2. If there are numbered sections or titles, translate them but keep them on separate lines
-3. Maintain the same paragraph structure and line spacing
-4. Keep hadith numbers and references in their original positions
-5. Do not combine multiple lines into paragraphs - keep each line separate as in the original
+CRITICAL TRANSLATION AND FORMATTING RULES:
+1. Translate ONLY what is written in the provided text - do not add any external content
+2. If text appears to be cut off or incomplete, translate only what is visible - do not complete or guess the missing parts
+3. Do not add explanations, context, or any text that is not in the original
 
-Provide ONLY the translation with the exact same formatting structure as the Arabic text.
+EXACT FORMATTING REQUIREMENTS:
+4. Preserve the EXACT line breaks and blank lines as shown in the original Arabic text
+5. If there are page numbers (like "- ١١ -"), translate them but keep them on separate lines with the same spacing
+6. Each hadith should be separated by blank lines just like in the original
+7. Hadith titles (like "الحديث الثالث عشر") should be on separate lines with proper spacing before and after
+8. Keep the chain of narration (إسناد) on separate lines as in the original
+9. Keep hadith text on separate lines maintaining the original line breaks
+10. Keep references (like "رواه البخاري") on separate lines with proper spacing
+11. Do not combine multiple lines into paragraphs - each line should remain separate
+12. Maintain the visual structure so it looks identical to the Arabic version when rendered
+
+Provide ONLY the direct translation preserving the exact visual layout and spacing of the Arabic text.
 
 Arabic text:
 {text}
@@ -76,7 +85,7 @@ Arabic text:
                 return response.text.strip()
             elif self.provider == "openai":
                 response = self.openai_client.chat.completions.create(
-                    model=os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4o-mini"),
+                    model=os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4.1"),
                     messages=[{
                         "role": "user",
                         "content": prompt
@@ -104,14 +113,23 @@ Arabic text:
             prompt = f"""
 Look at this image containing Arabic text and translate all the Arabic text you see to {target_lang_name}.
 
-IMPORTANT FORMATTING REQUIREMENTS:
-1. Preserve the EXACT line breaks and spacing as shown in the original Arabic text
-2. If there are numbered sections (like "التاسع والثلاثون" or "الأربعون"), translate them but keep them on separate lines
-3. Maintain the same paragraph structure and line spacing
-4. Keep hadith numbers and references (like "رواه البخاري") in their original positions
-5. Do not combine multiple lines into paragraphs - keep each line separate as in the original
+CRITICAL TRANSLATION AND FORMATTING RULES:
+1. Translate ONLY the Arabic text that is visible in the image - do not add any external content
+2. If text appears to be cut off at the edges or partially visible, translate only what you can clearly see - do not complete or guess the missing parts
+3. Do not add any explanations, context, interpretations, or text that is not actually written in the image
 
-Provide ONLY the translation with the exact same formatting structure as the Arabic text.
+EXACT FORMATTING REQUIREMENTS:
+4. Preserve the EXACT line breaks and blank lines as shown in the original Arabic text
+5. If there are page numbers (like "- ١١ -"), translate them but keep them on separate lines with the same spacing
+6. Each hadith should be separated by blank lines just like in the original
+7. Hadith titles (like "الحديث الثالث عشر") should be on separate lines with proper spacing before and after
+8. Keep the chain of narration (إسناد) on separate lines as in the original
+9. Keep hadith text on separate lines maintaining the original line breaks
+10. Keep references (like "رواه البخاري") on separate lines with proper spacing
+11. Do not combine multiple lines into paragraphs - each line should remain separate
+12. Maintain the visual structure so it looks identical to the Arabic version when rendered
+
+Provide ONLY the direct translation preserving the exact visual layout and spacing of the Arabic text.
 
 Translate to {target_lang_name}:
 """
@@ -130,7 +148,7 @@ Translate to {target_lang_name}:
 
             elif self.provider == "openai":
                 response = self.openai_client.chat.completions.create(
-                    model=os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4o-mini"),
+                    model=os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4.1"),
                     messages=[{
                         "role": "user",
                         "content": [

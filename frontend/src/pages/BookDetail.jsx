@@ -2,30 +2,10 @@ import { useEffect, useState, useRef, forwardRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle, Eye, Languages } from 'lucide-react';
 import { useBookStore, usePageStore } from '../lib/store';
-
+import { apiClient } from '../lib/api';
 import { cn } from '../lib/utils';
 
-// Translation API client
-const translationAPI = {
-  async translateText(text, targetLanguage = 'id') {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/translate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        text,
-        target_language: targetLanguage,
-      }),
-    });
 
-    if (!response.ok) {
-      throw new Error('Translation failed');
-    }
-
-    return response.json();
-  },
-};
 
 export default function BookDetail() {
   const { id } = useParams();
@@ -46,8 +26,6 @@ export default function BookDetail() {
   const [showText, setShowText] = useState(false);
   
   // Modal states
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showUploadForm, setShowUploadForm] = useState(false);
   const [showFileUploadForm, setShowFileUploadForm] = useState(false);
   
   // Translation states
@@ -132,23 +110,28 @@ export default function BookDetail() {
     setSearchParams({ page: pageNumber.toString() });
   };
 
-  const handleDeletePage = async (pageNumber) => {
-    if (window.confirm('Are you sure you want to delete this page?')) {
-      await deletePage(bookId, pageNumber);
-    }
-  };
+
 
   // Translation function
   const handleTranslate = async () => {
-    if (!selectedPage?.original_text) return;
+    if (!selectedPage?.id || !selectedPage?.original_text) return;
     
     setIsTranslating(true);
     setTranslationError('');
     setShowTranslationModal(true);
     
     try {
-      const result = await translationAPI.translateText(selectedPage.original_text);
-      setTranslation(result.translated_text);
+      const response = await apiClient.translateText({
+        page_id: selectedPage.id,
+        target_language: 'id',
+        use_image: true  // Use image-based translation with Gemini
+      });
+
+      if (response.success) {
+        setTranslation(response.translated_text);
+      } else {
+        setTranslationError('Translation failed. Please try again.');
+      }
     } catch (error) {
       console.error('Translation failed:', error);
       setTranslationError('Translation failed. Please try again.');
@@ -277,37 +260,26 @@ export default function BookDetail() {
           </div>
         </div>
         <div className="flex space-x-3">
-          <button
-            onClick={() => setShowUploadForm(true)}
-            className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Upload Cover
-          </button>
-          <button
-            onClick={() => setShowFileUploadForm(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-          >
-            <FileText className="w-4 h-4" />
-            Upload Files
-          </button>
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Page
-          </button>
+          {/* Only show upload files button if book has no pages */}
+          {bookPages.length === 0 && (
+            <button
+              onClick={() => setShowFileUploadForm(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              Upload Files
+            </button>
+          )}
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar - Page Navigation */}
-        <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+        <div className="w-80 bg-gray-50 border-r border-gray-200 flex flex-col">
           {/* Sidebar Header */}
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-sm font-medium text-gray-900">Pages ({bookPages.length})</h2>
+          <div className="p-4 border-b border-gray-200 bg-white">
+            <h2 className="text-sm font-semibold text-gray-900">Pages ({bookPages.length})</h2>
             {error && (
               <div className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded">
                 {error}
@@ -316,7 +288,7 @@ export default function BookDetail() {
           </div>
 
           {/* Page List */}
-          <div ref={pageListRef} className="flex-1 overflow-y-auto">
+          <div ref={pageListRef} className="flex-1 overflow-y-auto p-3 space-y-2">
             {bookPages.length === 0 ? (
               <div className="p-4 text-center">
                 <FileText className="mx-auto h-8 w-8 text-gray-400 mb-2" />
@@ -329,7 +301,7 @@ export default function BookDetail() {
                 </button>
               </div>
             ) : (
-              <div className="p-2 space-y-2">
+              <>
                 {bookPages.map((page) => (
                   <PageThumbnail
                           key={page.page_number}
@@ -337,10 +309,9 @@ export default function BookDetail() {
                           page={page}
                           isSelected={page.page_number === selectedPageNumber}
                           onClick={() => handlePageSelect(page.page_number)}
-                          onDelete={() => handleDeletePage(page.page_number)}
                         />
                 ))}
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -355,27 +326,17 @@ export default function BookDetail() {
                   <span className="text-sm font-medium text-gray-900">
                     Page {selectedPage.page_number}
                   </span>
-                  {selectedPage.embedding_model && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      Indexed
-                    </span>
-                  )}
-                  {selectedPage.page_image_url && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      Has Image
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   {/* Translation Button */}
-                  {selectedPage.original_text && !selectedPage.id_translation && (
+                  {selectedPage.original_text && (
                     <button
                       onClick={handleTranslate}
                       disabled={isTranslating}
                       className="flex items-center gap-2 px-3 py-1 text-sm text-green-600 hover:text-green-500 border border-green-200 rounded-md hover:bg-green-50 disabled:opacity-50"
                     >
                       <Languages className="w-4 h-4" />
-                      {isTranslating ? "Translating..." : "Translate to Bahasa"}
+                      {isTranslating ? "Translating..." : selectedPage.id_translation ? "Retranslate" : "Translate to Bahasa"}
                     </button>
                   )}
                   
@@ -383,9 +344,9 @@ export default function BookDetail() {
                   {selectedPage.id_translation && (
                     <button
                       onClick={() => setShowTranslationModal(true)}
-                      className="flex items-center gap-2 px-3 py-1 text-sm text-green-600 hover:text-green-500 border border-green-200 rounded-md hover:bg-green-50"
+                      className="flex items-center gap-2 px-3 py-1 text-sm text-blue-600 hover:text-blue-500 border border-blue-200 rounded-md hover:bg-blue-50"
                     >
-                      <Languages className="w-4 h-4" />
+                      <Eye className="w-4 h-4" />
                       Show Translation
                     </button>
                   )}
@@ -427,21 +388,7 @@ export default function BookDetail() {
 
 
 
-      {/* Create Page Modal */}
-      {showCreateForm && (
-        <CreatePageModal
-          bookId={bookId}
-          onClose={() => setShowCreateForm(false)}
-        />
-      )}
 
-      {/* Upload Cover Modal */}
-      {showUploadForm && (
-        <UploadCoverModal
-          bookId={bookId}
-          onClose={() => setShowUploadForm(false)}
-        />
-      )}
 
       {/* File Upload Modal */}
       {showFileUploadForm && (
@@ -683,70 +630,46 @@ export default function BookDetail() {
 }
 
 // New components for PDF viewer layout
-const PageThumbnail = forwardRef(({ page, isSelected, onClick, onDelete }, ref) => {
+const PageThumbnail = forwardRef(({ page, isSelected, onClick }, ref) => {
   return (
     <div
       ref={ref}
       className={cn(
-        "p-3 rounded-lg border cursor-pointer transition-all hover:shadow-sm",
+        "group cursor-pointer p-4 rounded-xl transition-all duration-200 relative",
         isSelected 
-          ? "border-blue-500 bg-blue-50 shadow-sm" 
-          : "border-gray-200 hover:border-gray-300"
+          ? "bg-blue-50 border-2 border-blue-300 shadow-md" 
+          : "hover:bg-gray-50 hover:shadow-sm border-2 border-transparent"
       )}
       onClick={onClick}
     >
-      <div className="flex items-start space-x-3">
+      <div className="flex flex-col items-center space-y-3">
         {/* Page thumbnail */}
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 relative">
           {page.page_image_url ? (
             <img
               src={page.page_image_url}
               alt={`Page ${page.page_number}`}
-              className="w-12 h-16 object-cover rounded border"
+              className="w-30 h-40 object-cover rounded-lg border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow"
             />
           ) : (
-            <div className="w-12 h-16 bg-gray-100 rounded border flex items-center justify-center">
-              <FileText className="w-6 h-6 text-gray-400" />
+            <div className="w-30 h-40 bg-gray-100 rounded-lg border-2 border-gray-200 shadow-sm flex items-center justify-center hover:shadow-md transition-shadow">
+              <FileText className="w-12 h-12 text-gray-400" />
+            </div>
+          )}
+          
+          {/* Translation indicator */}
+          {page.id_translation && (
+            <div className="absolute -top-2 -right-2 bg-green-500 rounded-full p-1.5 shadow-md">
+              <Languages className="w-4 h-4 text-white" />
             </div>
           )}
         </div>
 
         {/* Page info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-900">
-              Page {page.page_number}
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              className="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </div>
-          
-          <div className="flex items-center space-x-1 mt-1">
-            {page.embedding_model && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                Indexed
-              </span>
-            )}
-            {page.page_image_url && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                Image
-              </span>
-            )}
-          </div>
-
-          {/* Text preview */}
-          {page.original_text && (
-            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-              {page.original_text.substring(0, 60)}...
-            </p>
-          )}
+        <div className="w-full flex items-center justify-center">
+          <span className="text-sm font-semibold text-gray-900">
+            Page {page.page_number}
+          </span>
         </div>
       </div>
     </div>
@@ -834,16 +757,6 @@ function PageCard({ page, onDelete }) {
       <div className="flex justify-between items-start p-4 pb-0">
         <div className="flex items-center space-x-2">
           <span className="text-sm font-medium text-gray-500">Page {page.page_number}</span>
-          {page.embedding_model && (
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-              Indexed
-            </span>
-          )}
-          {page.page_image_url && (
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              Has Image
-            </span>
-          )}
         </div>
 
         <div className="flex space-x-2">
@@ -926,145 +839,6 @@ function PageCard({ page, onDelete }) {
               Updated: {new Date(page.updated_at).toLocaleDateString()}
             </span>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CreatePageModal({ bookId, onClose }) {
-  const { createPage, loading } = usePageStore();
-  const [formData, setFormData] = useState({
-    page_number: 1,
-    original_text: ''
-  });
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await createPage(bookId, formData);
-      onClose();
-    } catch (error) {
-      // Error is handled by the store
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="mt-3">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Add New Page</h3>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Page Number</label>
-              <input
-                type="number"
-                min="1"
-                required
-                value={formData.page_number}
-                onChange={(e) => setFormData({ ...formData, page_number: parseInt(e.target.value) })}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Original Text</label>
-              <textarea
-                required
-                value={formData.original_text}
-                onChange={(e) => setFormData({ ...formData, original_text: e.target.value })}
-                rows={6}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter the original text for this page..."
-              />
-            </div>
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {loading ? 'Creating...' : 'Create Page'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function UploadCoverModal({ bookId, onClose }) {
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const { fetchBooks } = useBookStore();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!file) return;
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await fetch(`/api/books/${bookId}/cover`, {
-        method: 'POST',
-        body: formData
-      });
-      
-      if (response.ok) {
-        await fetchBooks(); // Refresh books to get updated cover URL
-        onClose();
-      } else {
-        throw new Error('Upload failed');
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="mt-3">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Upload Cover Image</h3>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Cover Image</label>
-              <input
-                type="file"
-                accept="image/*"
-                required
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-            </div>
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={uploading || !file}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {uploading ? 'Uploading...' : 'Upload'}
-              </button>
-            </div>
-          </form>
         </div>
       </div>
     </div>

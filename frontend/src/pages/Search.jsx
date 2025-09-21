@@ -293,7 +293,7 @@ function SearchResultCard({ result, navigate }) {
 
     setIsTranslating(true);
     try {
-      const response = await apiClient.translatePage({
+      const response = await apiClient.translateText({
         page_id: page_id,
         target_language: 'id',
         use_image: true  // Use image-based translation with Gemini
