@@ -52,20 +52,24 @@ async def multilingual_search(
     try:
         print(f"ROUTER: Multilingual search called with query: '{request.query}', language: {request.query_language}")
 
-        results = await search_service.multilingual_search(
+        results, total_count = await search_service.multilingual_search(
             db=db,
             query=request.query,
             query_language=request.query_language,
             limit=request.limit,
+            offset=request.offset,
             similarity_threshold=request.similarity_threshold
         )
 
-        print(f"ROUTER: Multilingual search returned {len(results)} results")
+        print(f"ROUTER: Multilingual search returned {len(results)} results out of {total_count} total")
 
         return SearchResponse(
             query=request.query,
             results=results,
-            total_results=len(results)
+            total_results=total_count,
+            offset=request.offset,
+            limit=request.limit,
+            has_more=(request.offset + len(results)) < total_count
         )
 
     except Exception as e:

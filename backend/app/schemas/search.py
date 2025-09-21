@@ -5,6 +5,7 @@ from uuid import UUID
 class SearchRequest(BaseModel):
     query: str
     limit: Optional[int] = 10
+    offset: Optional[int] = 0
     similarity_threshold: Optional[float] = 0.7
     query_language: Optional[str] = None  # 'en', 'id', 'ar', or None for auto-detection
 
@@ -25,4 +26,7 @@ class SearchResponse(BaseModel):
     results: List[SearchResult]
     query: str
     total_results: int
+    offset: int
+    limit: int
+    has_more: bool
     query_embedding_model: Optional[str] = None

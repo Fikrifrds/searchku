@@ -121,8 +121,9 @@ class SearchService:
         query: str,
         query_language: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: Optional[int] = None,
         similarity_threshold: Optional[float] = None
-    ) -> List[SearchResult]:
+    ) -> tuple[List[SearchResult], int]:
         """
         Perform enhanced multilingual semantic search.
         Optimized for cross-language queries (English/Bahasa -> Arabic content).
@@ -140,10 +141,11 @@ class SearchService:
         try:
             # Set defaults for multilingual search
             limit = limit or self.default_limit
+            offset = offset or 0
             similarity_threshold = similarity_threshold or self.multilingual_threshold
 
             logger.info(f"Performing multilingual search for query: '{query}' in language: {query_language or 'auto'}")
-            print(f"MULTILINGUAL SEARCH: Query: '{query}', Language: {query_language or 'auto'}, Threshold: {similarity_threshold}")
+            print(f"MULTILINGUAL SEARCH: Query: '{query}', Language: {query_language or 'auto'}, Threshold: {similarity_threshold}, Offset: {offset}, Limit: {limit}")
 
             # Generate embedding for the query (OpenAI embeddings are naturally multilingual)
             query_embedding = await embedding_service.generate_embedding(query, task_type="RETRIEVAL_QUERY")
@@ -151,9 +153,26 @@ class SearchService:
 
             if not query_embedding:
                 logger.error("Failed to generate embedding for multilingual search query")
-                return []
+                return [], 0
 
-            # Enhanced SQL query that searches across original text and translations
+            # First, get total count for pagination
+            count_query = text("""
+                SELECT COUNT(*) as total_count
+                FROM pages p
+                WHERE p.embedding_vector IS NOT NULL
+                    AND 1 - (p.embedding_vector <=> CAST(:query_embedding AS vector)) >= :similarity_threshold
+            """)
+
+            count_result = db.execute(
+                count_query,
+                {
+                    "query_embedding": query_embedding,
+                    "similarity_threshold": similarity_threshold
+                }
+            )
+            total_count = count_result.fetchone().total_count
+
+            # Enhanced SQL query that searches across original text and translations with pagination
             sql_query = text("""
                 SELECT
                     p.id,
@@ -177,7 +196,7 @@ class SearchService:
                 WHERE p.embedding_vector IS NOT NULL
                     AND 1 - (p.embedding_vector <=> CAST(:query_embedding AS vector)) >= :similarity_threshold
                 ORDER BY p.embedding_vector <=> CAST(:query_embedding AS vector)
-                LIMIT :limit
+                LIMIT :limit OFFSET :offset
             """)
 
             result = db.execute(
@@ -185,7 +204,8 @@ class SearchService:
                 {
                     "query_embedding": query_embedding,
                     "similarity_threshold": similarity_threshold,
-                    "limit": limit
+                    "limit": limit,
+                    "offset": offset
                 }
             )
 
@@ -220,11 +240,11 @@ class SearchService:
                 )
                 search_results.append(search_result)
 
-            return search_results
+            return search_results, total_count
 
         except Exception as e:
             logger.error(f"Error performing multilingual search: {str(e)}")
-            return []
+            return [], 0
 
     async def text_search(
         self,

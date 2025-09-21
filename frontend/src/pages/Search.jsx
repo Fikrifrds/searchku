@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search as SearchIcon, Book, X, ExternalLink } from 'lucide-react';
+import { Search as SearchIcon, Book, X, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBookStore } from '../lib/store';
 import { apiClient } from '../lib/api';
@@ -18,6 +18,14 @@ export default function Search() {
   );
   const [searchType, setSearchType] = useState('multilingual'); // Always default to multilingual
   const [isSearching, setIsSearching] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(
+    searchParams.get('page') ? parseInt(searchParams.get('page')) : 1
+  );
+  const [totalResults, setTotalResults] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const resultsPerPage = 20;
 
   // Fetch books on component mount
   useEffect(() => {
@@ -32,9 +40,11 @@ export default function Search() {
       setIsSearching(true);
       try {
         const detectedLanguage = detectLanguage(query);
+        const offset = (currentPage - 1) * resultsPerPage;
         const searchRequest = {
           query: query.trim(),
-          limit: 20,
+          limit: resultsPerPage,
+          offset: offset,
           similarity_threshold: searchType === 'multilingual' ? 0.1 : 0.1,
           query_language: detectedLanguage
         };
@@ -55,16 +65,20 @@ export default function Search() {
         }
 
         setSearchResults(results);
+        setTotalResults(response.total_results);
+        setHasMore(response.has_more);
       } catch (error) {
         console.error('Search failed:', error);
         setSearchResults([]);
+        setTotalResults(0);
+        setHasMore(false);
       } finally {
         setIsSearching(false);
       }
     };
 
     performInitialSearch();
-  }, []); // Only run on mount
+  }, [currentPage]); // Re-run when page changes
 
   // Simple language detection
   const detectLanguage = (text) => {
@@ -89,12 +103,17 @@ export default function Search() {
     return 'auto'; // Default to auto-detection
   };
 
-  const handleSearch = async () => {
+  const handleSearch = async (pageNumber = 1) => {
     if (!query.trim()) return;
+
+    // Reset to page 1 for new searches, or use specified page
+    const targetPage = pageNumber;
+    setCurrentPage(targetPage);
 
     // Update URL parameters
     const params = new URLSearchParams();
     params.set('q', query.trim());
+    params.set('page', targetPage.toString());
     if (selectedBookId) {
       params.set('book', selectedBookId.toString());
     }
@@ -103,9 +122,11 @@ export default function Search() {
     setIsSearching(true);
     try {
       const detectedLanguage = detectLanguage(query);
+      const offset = (targetPage - 1) * resultsPerPage;
       const searchRequest = {
         query: query.trim(),
-        limit: 20,
+        limit: resultsPerPage,
+        offset: offset,
         similarity_threshold: searchType === 'multilingual' ? 0.1 : 0.1,
         query_language: detectedLanguage
       };
@@ -126,9 +147,13 @@ export default function Search() {
       }
 
       setSearchResults(results);
+      setTotalResults(response.total_results);
+      setHasMore(response.has_more);
     } catch (error) {
       console.error('Search failed:', error);
       setSearchResults([]);
+      setTotalResults(0);
+      setHasMore(false);
     } finally {
       setIsSearching(false);
     }
@@ -143,22 +168,52 @@ export default function Search() {
   const clearSearch = () => {
     setQuery('');
     setSearchResults([]);
+    setCurrentPage(1);
+    setTotalResults(0);
+    setHasMore(false);
     setSearchParams({}); // Clear URL parameters
   };
 
   const handleBookFilterChange = (bookId) => {
     const newBookId = bookId ? Number(bookId) : null;
     setSelectedBookId(newBookId);
+    // Reset to page 1 when changing book filter
+    setCurrentPage(1);
     // Update URL if there's an active search
     if (query.trim()) {
       const params = new URLSearchParams();
       params.set('q', query.trim());
+      params.set('page', '1');
       if (newBookId) {
         params.set('book', newBookId.toString());
       }
       setSearchParams(params);
+      // Trigger new search with updated filter
+      handleSearch(1);
     }
   };
+
+  // Pagination handlers
+  const handlePageChange = (pageNumber) => {
+    if (pageNumber >= 1 && pageNumber <= totalPages && !isSearching) {
+      handleSearch(pageNumber);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      handlePageChange(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (hasMore) {
+      handlePageChange(currentPage + 1);
+    }
+  };
+
+  // Calculate total pages
+  const totalPages = Math.ceil(totalResults / resultsPerPage);
 
   return (
     <div className="space-y-6">
@@ -237,7 +292,7 @@ export default function Search() {
         <div className="bg-white shadow rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-medium text-gray-900">
-              Search Results ({searchResults.length})
+              Search Results ({totalResults} total, showing {searchResults.length} on page {currentPage})
             </h2>
           </div>
           <div className="p-6">
@@ -245,6 +300,118 @@ export default function Search() {
               {searchResults.map((result, index) => (
                 <SearchResultCard key={`${result.page_id}-${index}`} result={result} navigate={navigate} />
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {searchResults.length > 0 && totalPages > 1 && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-sm text-gray-700">
+              <span>
+                Showing {((currentPage - 1) * resultsPerPage) + 1} to {Math.min(currentPage * resultsPerPage, totalResults)} of {totalResults} results
+              </span>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              {/* Previous Button */}
+              <button
+                onClick={handlePreviousPage}
+                disabled={currentPage === 1 || isSearching}
+                className={cn(
+                  'flex items-center px-3 py-2 text-sm font-medium rounded-md',
+                  currentPage === 1 || isSearching
+                    ? 'text-gray-400 cursor-not-allowed'
+                    : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                )}
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Previous
+              </button>
+
+              {/* Page Numbers */}
+              <div className="flex items-center space-x-1">
+                {/* First page */}
+                {currentPage > 3 && (
+                  <>
+                    <button
+                      onClick={() => handlePageChange(1)}
+                      disabled={isSearching}
+                      className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md"
+                    >
+                      1
+                    </button>
+                    {currentPage > 4 && (
+                      <span className="px-2 py-2 text-sm text-gray-500">...</span>
+                    )}
+                  </>
+                )}
+
+                {/* Current page and neighbors */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  if (pageNum < 1 || pageNum > totalPages) return null;
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      disabled={isSearching}
+                      className={cn(
+                        'px-3 py-2 text-sm font-medium rounded-md',
+                        pageNum === currentPage
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                      )}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+
+                {/* Last page */}
+                {currentPage < totalPages - 2 && (
+                  <>
+                    {currentPage < totalPages - 3 && (
+                      <span className="px-2 py-2 text-sm text-gray-500">...</span>
+                    )}
+                    <button
+                      onClick={() => handlePageChange(totalPages)}
+                      disabled={isSearching}
+                      className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md"
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Next Button */}
+              <button
+                onClick={handleNextPage}
+                disabled={!hasMore || isSearching}
+                className={cn(
+                  'flex items-center px-3 py-2 text-sm font-medium rounded-md',
+                  !hasMore || isSearching
+                    ? 'text-gray-400 cursor-not-allowed'
+                    : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                )}
+              >
+                Next
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </button>
             </div>
           </div>
         </div>
