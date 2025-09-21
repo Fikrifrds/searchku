@@ -1,16 +1,70 @@
 import { useState, useEffect } from 'react';
-import { Search as SearchIcon, Book, X } from 'lucide-react';
+import { Search as SearchIcon, Book, X, ExternalLink } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBookStore } from '../lib/store';
 import { apiClient } from '../lib/api';
 import { cn } from '../lib/utils';
 
 export default function Search() {
-  const { books } = useBookStore();
-  const [query, setQuery] = useState('');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { books, fetchBooks } = useBookStore();
+  
+  // Initialize state from URL parameters
+  const [query, setQuery] = useState(searchParams.get('q') || '');
   const [searchResults, setSearchResults] = useState([]);
-  const [selectedBookId, setSelectedBookId] = useState(null);
-  const [searchType, setSearchType] = useState('multilingual');
+  const [selectedBookId, setSelectedBookId] = useState(
+    searchParams.get('book') ? parseInt(searchParams.get('book')) : null
+  );
+  const [searchType, setSearchType] = useState('multilingual'); // Always default to multilingual
   const [isSearching, setIsSearching] = useState(false);
+
+  // Fetch books on component mount
+  useEffect(() => {
+    fetchBooks();
+  }, [fetchBooks]);
+
+  // Perform search on page load if query exists in URL
+  useEffect(() => {
+    const performInitialSearch = async () => {
+      if (!query.trim()) return;
+
+      setIsSearching(true);
+      try {
+        const detectedLanguage = detectLanguage(query);
+        const searchRequest = {
+          query: query.trim(),
+          limit: 20,
+          similarity_threshold: searchType === 'multilingual' ? 0.1 : 0.1,
+          query_language: detectedLanguage
+        };
+
+        let response;
+        if (searchType === 'multilingual') {
+          response = await apiClient.multilingualSearch(searchRequest);
+        } else if (searchType === 'semantic') {
+          response = await apiClient.semanticSearch(searchRequest);
+        } else {
+          response = await apiClient.textSearch(searchRequest);
+        }
+
+        // Filter by selected book if specified
+        let results = response.results;
+        if (selectedBookId) {
+          results = results.filter(result => result.book_id === selectedBookId);
+        }
+
+        setSearchResults(results);
+      } catch (error) {
+        console.error('Search failed:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    performInitialSearch();
+  }, []); // Only run on mount
 
   // Simple language detection
   const detectLanguage = (text) => {
@@ -37,6 +91,14 @@ export default function Search() {
 
   const handleSearch = async () => {
     if (!query.trim()) return;
+
+    // Update URL parameters
+    const params = new URLSearchParams();
+    params.set('q', query.trim());
+    if (selectedBookId) {
+      params.set('book', selectedBookId.toString());
+    }
+    setSearchParams(params);
 
     setIsSearching(true);
     try {
@@ -81,6 +143,21 @@ export default function Search() {
   const clearSearch = () => {
     setQuery('');
     setSearchResults([]);
+    setSearchParams({}); // Clear URL parameters
+  };
+
+  const handleBookFilterChange = (bookId) => {
+    const newBookId = bookId ? Number(bookId) : null;
+    setSelectedBookId(newBookId);
+    // Update URL if there's an active search
+    if (query.trim()) {
+      const params = new URLSearchParams();
+      params.set('q', query.trim());
+      if (newBookId) {
+        params.set('book', newBookId.toString());
+      }
+      setSearchParams(params);
+    }
   };
 
   return (
@@ -111,26 +188,12 @@ export default function Search() {
 
           {/* Search Options */}
           <div className="flex flex-wrap items-center gap-4">
-            {/* Search Type */}
-            <div className="flex items-center space-x-2">
-              <label className="text-sm font-medium text-gray-700">Search Type:</label>
-              <select
-                value={searchType}
-                onChange={(e) => setSearchType(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="multilingual">Multilingual Search</option>
-                <option value="semantic">Semantic Search</option>
-                <option value="text">Text Search</option>
-              </select>
-            </div>
-
             {/* Book Filter */}
             <div className="flex items-center space-x-2">
               <label className="text-sm font-medium text-gray-700">Filter by Book:</label>
               <select
                 value={selectedBookId || ''}
-                onChange={(e) => setSelectedBookId(e.target.value ? Number(e.target.value) : null)}
+                onChange={(e) => handleBookFilterChange(e.target.value)}
                 className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">All Books</option>
@@ -180,7 +243,7 @@ export default function Search() {
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {searchResults.map((result, index) => (
-                <SearchResultCard key={`${result.page_id}-${index}`} result={result} />
+                <SearchResultCard key={`${result.page_id}-${index}`} result={result} navigate={navigate} />
               ))}
             </div>
           </div>
@@ -201,7 +264,7 @@ export default function Search() {
   );
 }
 
-function SearchResultCard({ result }) {
+function SearchResultCard({ result, navigate }) {
   const [showText, setShowText] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const {
@@ -217,6 +280,10 @@ function SearchResultCard({ result }) {
     book_title,
     book_author
   } = result;
+
+  const handleGoToDetail = () => {
+    navigate(`/books/${book_id}?page=${page_number}`);
+  };
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white">
@@ -244,17 +311,24 @@ function SearchResultCard({ result }) {
           </div>
         </div>
 
-        {/* Toggle Button for Image/Text */}
-        {page_image_url && (
-          <div className="mt-3">
+        {/* Action Buttons */}
+        <div className="mt-3 flex items-center space-x-2">
+          {page_image_url && (
             <button
               onClick={() => setShowText(!showText)}
               className="text-sm text-blue-600 hover:text-blue-500 font-medium px-3 py-1 rounded-md border border-blue-200 hover:bg-blue-50"
             >
               {showText ? "Show Image" : "Show Text"}
             </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={handleGoToDetail}
+            className="text-sm text-green-600 hover:text-green-500 font-medium px-3 py-1 rounded-md border border-green-200 hover:bg-green-50 flex items-center space-x-1"
+          >
+            <ExternalLink className="w-3 h-3" />
+            <span>Go to Detail</span>
+          </button>
+        </div>
       </div>
 
       {/* Content Area */}

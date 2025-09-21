@@ -1,17 +1,29 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { useEffect, useState, useRef, forwardRef } from 'react';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle, Eye } from 'lucide-react';
 import { useBookStore, usePageStore } from '../lib/store';
 
 import { cn } from '../lib/utils';
 
 export default function BookDetail() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const bookId = parseInt(id || '0');
+  const initialPage = parseInt(searchParams.get('page') || '1');
   
   const { books, loading: bookLoading, fetchBooks } = useBookStore();
   const { pages, loading: pageLoading, error, fetchPages, deletePage } = usePageStore();
   
+  // Refs for auto-scroll functionality
+  const pageListRef = useRef(null);
+  const pageRefs = useRef({});
+  const isManualClick = useRef(false);
+  
+  // Page selection state
+  const [selectedPageNumber, setSelectedPageNumber] = useState(initialPage);
+  const [showText, setShowText] = useState(false);
+  
+  // Modal states
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [showFileUploadForm, setShowFileUploadForm] = useState(false);
@@ -24,7 +36,8 @@ export default function BookDetail() {
   const [isDragOver, setIsDragOver] = useState(false);
   
   const book = books.find(b => b.id === bookId);
-  const bookPages = pages.filter(p => p.book_id === bookId);
+  const bookPages = pages.filter(p => p.book_id === bookId).sort((a, b) => a.page_number - b.page_number);
+  const selectedPage = bookPages.find(p => p.page_number === selectedPageNumber);
 
   useEffect(() => {
     if (books.length === 0) {
@@ -32,6 +45,64 @@ export default function BookDetail() {
     }
     fetchPages(bookId);
   }, [bookId, books.length, fetchBooks, fetchPages]);
+
+  // Update selected page when URL parameter changes
+  useEffect(() => {
+    const pageParam = parseInt(searchParams.get('page') || '1');
+    setSelectedPageNumber(pageParam);
+  }, [searchParams]);
+
+  // Set default page to 1 when pages are loaded
+  useEffect(() => {
+    if (bookPages.length > 0 && !selectedPage) {
+      setSelectedPageNumber(1);
+    }
+  }, [bookPages, selectedPage]);
+
+  // Auto-scroll to selected page in sidebar
+  useEffect(() => {
+    // Skip auto-scroll if this is a manual click
+    if (isManualClick.current) {
+      isManualClick.current = false;
+      return;
+    }
+    
+    if (selectedPageNumber && bookPages.length > 0 && pageListRef.current) {
+      // Add a small delay to ensure DOM elements are rendered
+      const scrollToPage = () => {
+        const selectedElement = pageRefs.current[selectedPageNumber];
+        const container = pageListRef.current;
+        
+        if (selectedElement && container) {
+          // Calculate the position to scroll to center the selected page
+          const containerHeight = container.clientHeight;
+          const elementTop = selectedElement.offsetTop;
+          const elementHeight = selectedElement.clientHeight;
+          const scrollTop = elementTop - (containerHeight / 2) + (elementHeight / 2);
+          
+          container.scrollTo({
+            top: Math.max(0, scrollTop),
+            behavior: 'smooth'
+          });
+        } else {
+          // If element not found, try again after a short delay
+          setTimeout(scrollToPage, 100);
+        }
+      };
+      
+      // Use requestAnimationFrame to ensure DOM is updated
+      requestAnimationFrame(() => {
+        setTimeout(scrollToPage, 50);
+      });
+    }
+  }, [selectedPageNumber, bookPages.length]);
+
+  // Function to handle page navigation with URL update
+  const handlePageSelect = (pageNumber) => {
+    isManualClick.current = true;
+    setSelectedPageNumber(pageNumber);
+    setSearchParams({ page: pageNumber.toString() });
+  };
 
   const handleDeletePage = async (pageNumber) => {
     if (window.confirm('Are you sure you want to delete this page?')) {
@@ -142,9 +213,9 @@ export default function BookDetail() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Link
             to="/books"
@@ -153,25 +224,29 @@ export default function BookDetail() {
             <ArrowLeft className="w-4 h-4 mr-1" />
             Back to Books
           </Link>
+          <div className="border-l border-gray-300 pl-4">
+            <h1 className="text-lg font-semibold text-gray-900">{book.title}</h1>
+            <p className="text-sm text-gray-500">by {book.author}</p>
+          </div>
         </div>
         <div className="flex space-x-3">
           <button
             onClick={() => setShowUploadForm(true)}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
           >
             <Upload className="w-4 h-4 mr-2" />
             Upload Cover
           </button>
           <button
             onClick={() => setShowFileUploadForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
           >
             <FileText className="w-4 h-4" />
             Upload Files
           </button>
           <button
             onClick={() => setShowCreateForm(true)}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Page
@@ -179,84 +254,105 @@ export default function BookDetail() {
         </div>
       </div>
 
-      {/* Book Info */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4">
-          <div className="flex items-start space-x-6">
-            <div className="flex-shrink-0">
-              {book.cover_image_url ? (
-                <img
-                  src={book.cover_image_url}
-                  alt={book.title}
-                  className="w-32 h-40 object-cover rounded-lg shadow"
-                />
-              ) : (
-                <div className="w-32 h-40 bg-gray-200 rounded-lg flex items-center justify-center">
-                  <BookOpen className="h-12 w-12 text-gray-400" />
-                </div>
-              )}
-            </div>
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold text-gray-900">{book.title}</h1>
-              <p className="text-lg text-gray-600 mt-1">by {book.author}</p>
-              <p className="text-sm text-gray-500 mt-1">Language: {book.language}</p>
-              {book.description && (
-                <p className="text-gray-700 mt-4">{book.description}</p>
-              )}
-              <div className="mt-4 flex items-center space-x-4 text-sm text-gray-500">
-                <span>{bookPages.length} pages</span>
-                <span>Created: {new Date(book.created_at).toLocaleDateString()}</span>
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar - Page Navigation */}
+        <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+          {/* Sidebar Header */}
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-sm font-medium text-gray-900">Pages ({bookPages.length})</h2>
+            {error && (
+              <div className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded">
+                {error}
               </div>
-            </div>
+            )}
           </div>
-        </div>
-      </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <p className="text-red-800">{error}</p>
-        </div>
-      )}
-
-      {/* Pages */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Pages</h2>
-        </div>
-        <div className="p-6">
-          {bookPages.length === 0 ? (
-            <div className="text-center py-8">
-              <FileText className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No pages yet</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Get started by adding the first page to this book
-              </p>
-              <div className="mt-6">
+          {/* Page List */}
+          <div ref={pageListRef} className="flex-1 overflow-y-auto">
+            {bookPages.length === 0 ? (
+              <div className="p-4 text-center">
+                <FileText className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                <p className="text-sm text-gray-500">No pages yet</p>
                 <button
                   onClick={() => setShowCreateForm(true)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                  className="mt-2 text-xs text-blue-600 hover:text-blue-500"
                 >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Page
+                  Add first page
                 </button>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {bookPages
-                .sort((a, b) => a.page_number - b.page_number)
-                .map((page) => (
-                  <PageCard
-                    key={page.page_number}
-                    page={page}
-                    onDelete={() => handleDeletePage(page.page_number)}
-                  />
+            ) : (
+              <div className="p-2 space-y-2">
+                {bookPages.map((page) => (
+                  <PageThumbnail
+                          key={page.page_number}
+                          ref={(el) => pageRefs.current[page.page_number] = el}
+                          page={page}
+                          isSelected={page.page_number === selectedPageNumber}
+                          onClick={() => handlePageSelect(page.page_number)}
+                          onDelete={() => handleDeletePage(page.page_number)}
+                        />
                 ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Center Content Area */}
+        <div className="flex-1 flex flex-col bg-gray-100">
+          {selectedPage ? (
+            <>
+              {/* Content Header */}
+              <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <span className="text-sm font-medium text-gray-900">
+                    Page {selectedPage.page_number}
+                  </span>
+                  {selectedPage.embedding_model && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Indexed
+                    </span>
+                  )}
+                  {selectedPage.page_image_url && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Has Image
+                    </span>
+                  )}
+                </div>
+                {selectedPage.page_image_url && (
+                  <button
+                    onClick={() => setShowText(!showText)}
+                    className="flex items-center gap-2 px-3 py-1 text-sm text-blue-600 hover:text-blue-500 border border-blue-200 rounded-md hover:bg-blue-50"
+                  >
+                    <Eye className="w-4 h-4" />
+                    {showText ? "Show Image" : "Show Text"}
+                  </button>
+                )}
+              </div>
+
+              {/* Page Content */}
+              <div className="flex-1 overflow-auto p-6">
+                <PageContent page={selectedPage} showText={showText} />
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No page selected</h3>
+                <p className="text-sm text-gray-500">
+                  {bookPages.length > 0 
+                    ? "Select a page from the sidebar to view its content"
+                    : "Add pages to this book to get started"
+                  }
+                </p>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+
 
       {/* Create Page Modal */}
       {showCreateForm && (
@@ -436,6 +532,149 @@ export default function BookDetail() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// New components for PDF viewer layout
+const PageThumbnail = forwardRef(({ page, isSelected, onClick, onDelete }, ref) => {
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "p-3 rounded-lg border cursor-pointer transition-all hover:shadow-sm",
+        isSelected 
+          ? "border-blue-500 bg-blue-50 shadow-sm" 
+          : "border-gray-200 hover:border-gray-300"
+      )}
+      onClick={onClick}
+    >
+      <div className="flex items-start space-x-3">
+        {/* Page thumbnail */}
+        <div className="flex-shrink-0">
+          {page.page_image_url ? (
+            <img
+              src={page.page_image_url}
+              alt={`Page ${page.page_number}`}
+              className="w-12 h-16 object-cover rounded border"
+            />
+          ) : (
+            <div className="w-12 h-16 bg-gray-100 rounded border flex items-center justify-center">
+              <FileText className="w-6 h-6 text-gray-400" />
+            </div>
+          )}
+        </div>
+
+        {/* Page info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-900">
+              Page {page.page_number}
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+          
+          <div className="flex items-center space-x-1 mt-1">
+            {page.embedding_model && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                Indexed
+              </span>
+            )}
+            {page.page_image_url && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                Image
+              </span>
+            )}
+          </div>
+
+          {/* Text preview */}
+          {page.original_text && (
+            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+              {page.original_text.substring(0, 60)}...
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+function PageContent({ page, showText }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!page) return null;
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      {page.page_image_url && !showText ? (
+        // Show page image
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <img
+            src={page.page_image_url}
+            alt={`Page ${page.page_number}`}
+            className="w-full h-auto max-h-[80vh] object-contain"
+            onError={(e) => {
+              e.target.style.display = 'none';
+            }}
+          />
+        </div>
+      ) : (
+        // Show text content
+        <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">
+          {/* Original Text */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Original Text:</h4>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className={cn(
+                "text-sm text-gray-800 leading-relaxed whitespace-pre-wrap",
+                !isExpanded && page.original_text.length > 500 && "line-clamp-6"
+              )}>
+                {page.original_text}
+              </p>
+              {page.original_text.length > 500 && (
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="text-blue-600 hover:text-blue-500 text-sm mt-2"
+                >
+                  {isExpanded ? 'Show less' : 'Show more'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* English Translation */}
+          {page.en_translation && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3">English Translation:</h4>
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-800 leading-relaxed whitespace-pre-wrap">
+                  {page.en_translation}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Indonesian Translation */}
+          {page.id_translation && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Indonesian Translation:</h4>
+              <div className="p-4 bg-green-50 rounded-lg">
+                <p className="text-sm text-green-800 leading-relaxed whitespace-pre-wrap">
+                  {page.id_translation}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
