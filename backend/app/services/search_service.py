@@ -43,7 +43,7 @@ class SearchService:
             logger.info(f"Performing semantic search for query: '{query}' with limit: {limit}, threshold: {similarity_threshold}")
 
             # Generate embedding for the query
-            query_embedding = await embedding_service.generate_embedding(query)
+            query_embedding = await embedding_service.generate_embedding(query, task_type="RETRIEVAL_QUERY")
             print(f"SEMANTIC SEARCH: Generated embedding: {len(query_embedding) if query_embedding else 0} dimensions")
             logger.info(f"Generated query embedding: {len(query_embedding) if query_embedding else 0} dimensions")
             
@@ -146,7 +146,7 @@ class SearchService:
             print(f"MULTILINGUAL SEARCH: Query: '{query}', Language: {query_language or 'auto'}, Threshold: {similarity_threshold}")
 
             # Generate embedding for the query (OpenAI embeddings are naturally multilingual)
-            query_embedding = await embedding_service.generate_embedding(query)
+            query_embedding = await embedding_service.generate_embedding(query, task_type="RETRIEVAL_QUERY")
             logger.info(f"Generated multilingual query embedding: {len(query_embedding) if query_embedding else 0} dimensions")
 
             if not query_embedding:

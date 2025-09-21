@@ -39,7 +39,7 @@ async def create_page(
     # Generate embedding for the original text
     embedding_vector = None
     if page_data.original_text:
-        embedding_vector = await embedding_service.generate_embedding(page_data.original_text)
+        embedding_vector = await embedding_service.generate_embedding(page_data.original_text, task_type="RETRIEVAL_DOCUMENT")
 
     # Ensure embedding_vector is properly formatted for pgvector
     formatted_embedding = None
@@ -66,6 +66,13 @@ async def create_page(
     db.add(db_page)
     db.commit()
     db.refresh(db_page)
+
+    # Set as book cover if this is the first page and book doesn't have a cover
+    if db_page.page_number == 1 and not book.cover_image_url and db_page.page_image_url:
+        book.cover_image_url = db_page.page_image_url
+        db.commit()
+        logger.info(f"Set book cover image from first page: {db_page.page_image_url}")
+
     return db_page
 
 @router.get("/books/{book_id}/pages", response_model=List[PageResponse])
@@ -138,7 +145,7 @@ async def update_page(
         page.original_text = page_data.original_text
         # Regenerate embedding when original_text changes
         if page_data.original_text:
-            embedding_vector = await embedding_service.generate_embedding(page_data.original_text)
+            embedding_vector = await embedding_service.generate_embedding(page_data.original_text, task_type="RETRIEVAL_DOCUMENT")
             # Ensure embedding_vector is properly formatted for pgvector
             formatted_embedding = None
             if embedding_vector is not None:
@@ -273,7 +280,7 @@ async def upload_files_bulk(
                 if page_data.get('text'):
                     logger.info(f"Generating embedding for page {current_page_number}")
                     try:
-                        embedding_vector = await embedding_service.generate_embedding(page_data['text'])
+                        embedding_vector = await embedding_service.generate_embedding(page_data['text'], task_type="RETRIEVAL_DOCUMENT")
                         logger.info(f"Embedding generated successfully for page {current_page_number}")
                         logger.debug(f"Embedding type: {type(embedding_vector)}, length: {len(embedding_vector) if embedding_vector else 'None'}")
                         if embedding_vector and len(embedding_vector) > 0:
@@ -338,6 +345,19 @@ async def upload_files_bulk(
             try:
                 db.commit()
                 logger.info(f"Successfully committed {len(pages_created)} pages to database")
+
+                # Set the first page image as book cover if book doesn't have a cover yet
+                if pages_created and not book.cover_image_url:
+                    first_page = db.query(Page).filter(
+                        Page.book_id == book_id,
+                        Page.page_number == next_page_number
+                    ).first()
+
+                    if first_page and first_page.page_image_url:
+                        book.cover_image_url = first_page.page_image_url
+                        db.commit()
+                        logger.info(f"Set book cover image from first page: {first_page.page_image_url}")
+
             except Exception as commit_error:
                 logger.error(f"Error committing pages to database: {str(commit_error)}")
                 logger.error(f"Commit error type: {type(commit_error).__name__}")
