@@ -10,6 +10,7 @@ import io
 from PyPDF2 import PdfReader
 from docx import Document
 import pytesseract
+from .ocr_service import ocr_service
 from pdf2image import convert_from_bytes
 import fitz  # PyMuPDF
 from .s3_service import s3_service
@@ -205,27 +206,46 @@ class FileService:
                         (r'--oem 3 --psm 6 -l ara', "PSM 6 standard"),
                     ]
 
-                    for config, desc in ocr_configs:
-                        try:
-                            logger.info(f"Trying OCR config for page {i+1}: {desc}")
-                            page_text = pytesseract.image_to_string(image, config=config)
-                            text_length = len(page_text.strip())
-                            logger.info(f"{desc} extracted {text_length} characters")
+                    # Try Gemini OCR first
+                    try:
+                        logger.info(f"Using Gemini OCR for page {i+1}")
+                        page_text = await ocr_service.extract_text_from_pil_image(image)
+                        text_length = len(page_text.strip())
+                        logger.info(f"Gemini OCR extracted {text_length} characters")
 
-                            # Keep the best result (most text extracted)
-                            if text_length > best_length:
-                                best_text = page_text
-                                best_length = text_length
-                                logger.info(f"New best result with {desc}: {text_length} characters")
+                        if text_length > 0:
+                            best_text = page_text
+                            best_length = text_length
+                            logger.info(f"Gemini OCR successful for page {i+1}")
+                        else:
+                            raise Exception("Gemini OCR returned empty text")
 
-                            # If we got substantial text, we can stop trying
-                            if text_length > 100:
-                                logger.info(f"Good result achieved with {desc}, stopping further attempts")
-                                break
+                    except Exception as gemini_error:
+                        logger.warning(f"Gemini OCR failed for page {i+1}: {gemini_error}")
+                        logger.info("Falling back to traditional OCR")
 
-                        except Exception as e:
-                            logger.warning(f"OCR config '{desc}' failed for page {i+1}: {str(e)}")
-                            continue
+                        # Fallback to traditional OCR
+                        for config, desc in ocr_configs:
+                            try:
+                                logger.info(f"Trying OCR config for page {i+1}: {desc}")
+                                page_text = pytesseract.image_to_string(image, config=config)
+                                text_length = len(page_text.strip())
+                                logger.info(f"{desc} extracted {text_length} characters")
+
+                                # Keep the best result (most text extracted)
+                                if text_length > best_length:
+                                    best_text = page_text
+                                    best_length = text_length
+                                    logger.info(f"New best result with {desc}: {text_length} characters")
+
+                                # If we got substantial text, we can stop trying
+                                if text_length > 100:
+                                    logger.info(f"Good result achieved with {desc}, stopping further attempts")
+                                    break
+
+                            except Exception as e:
+                                logger.warning(f"OCR config '{desc}' failed for page {i+1}: {str(e)}")
+                                continue
 
                     page_text = best_text
                     logger.info(f"Final OCR page {i+1} result: {len(page_text)} characters")
@@ -572,16 +592,32 @@ class FileService:
                             best_text = ""
                             best_length = 0
 
-                            for config, desc in ocr_configs:
-                                try:
-                                    text_result = pytesseract.image_to_string(img, config=config)
-                                    if len(text_result.strip()) > best_length:
-                                        best_text = text_result
-                                        best_length = len(text_result.strip())
-                                        if best_length > 100:
-                                            break
-                                except Exception:
-                                    continue
+                            # Try Gemini OCR first
+                            try:
+                                logger.info(f"Using Gemini OCR for page {page_num}")
+                                gemini_text = await ocr_service.extract_text_from_pil_image(img)
+                                if len(gemini_text.strip()) > 0:
+                                    best_text = gemini_text
+                                    best_length = len(gemini_text.strip())
+                                    logger.info(f"Gemini OCR extracted {best_length} characters for page {page_num}")
+                                else:
+                                    raise Exception("Gemini OCR returned empty text")
+
+                            except Exception as gemini_error:
+                                logger.warning(f"Gemini OCR failed for page {page_num}: {gemini_error}")
+                                logger.info("Falling back to traditional OCR")
+
+                                # Fallback to traditional OCR
+                                for config, desc in ocr_configs:
+                                    try:
+                                        text_result = pytesseract.image_to_string(img, config=config)
+                                        if len(text_result.strip()) > best_length:
+                                            best_text = text_result
+                                            best_length = len(text_result.strip())
+                                            if best_length > 100:
+                                                break
+                                    except Exception:
+                                        continue
 
                             ocr_text = best_text.strip()
                             if ocr_text:

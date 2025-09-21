@@ -284,20 +284,6 @@ function SearchResultCard({ result, navigate }) {
     book_author
   } = result;
 
-  // Handle ESC key to close modal
-  useEffect(() => {
-    const handleEscKey = (event) => {
-      if (event.key === 'Escape' && showModal) {
-        setShowModal(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleEscKey);
-    return () => {
-      document.removeEventListener('keydown', handleEscKey);
-    };
-  }, [showModal]);
-
   const handleGoToDetail = () => {
     navigate(`/books/${book_id}?page=${page_number}`);
   };
@@ -476,7 +462,6 @@ function SearchResultCard({ result, navigate }) {
                   <div className="flex-1 bg-white border border-gray-200 rounded-lg p-6 max-h-[90vh] overflow-y-auto shadow-sm">
                     <div className="mb-4">
                       <h4 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
-                        <span className="mr-2">🇮🇩</span>
                         Terjemahan Bahasa Indonesia
                       </h4>
                     </div>
