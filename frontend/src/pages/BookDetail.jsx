@@ -1,9 +1,31 @@
 import { useEffect, useState, useRef, forwardRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle, Eye } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle, Eye, Languages } from 'lucide-react';
 import { useBookStore, usePageStore } from '../lib/store';
 
 import { cn } from '../lib/utils';
+
+// Translation API client
+const translationAPI = {
+  async translateText(text, targetLanguage = 'id') {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/translate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text,
+        target_language: targetLanguage,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Translation failed');
+    }
+
+    return response.json();
+  },
+};
 
 export default function BookDetail() {
   const { id } = useParams();
@@ -27,6 +49,12 @@ export default function BookDetail() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [showFileUploadForm, setShowFileUploadForm] = useState(false);
+  
+  // Translation states
+  const [translation, setTranslation] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState('');
+  const [showTranslationModal, setShowTranslationModal] = useState(false);
   
   // File upload states
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -107,6 +135,25 @@ export default function BookDetail() {
   const handleDeletePage = async (pageNumber) => {
     if (window.confirm('Are you sure you want to delete this page?')) {
       await deletePage(bookId, pageNumber);
+    }
+  };
+
+  // Translation function
+  const handleTranslate = async () => {
+    if (!selectedPage?.original_text) return;
+    
+    setIsTranslating(true);
+    setTranslationError('');
+    setShowTranslationModal(true);
+    
+    try {
+      const result = await translationAPI.translateText(selectedPage.original_text);
+      setTranslation(result.translated_text);
+    } catch (error) {
+      console.error('Translation failed:', error);
+      setTranslationError('Translation failed. Please try again.');
+    } finally {
+      setIsTranslating(false);
     }
   };
 
@@ -319,15 +366,41 @@ export default function BookDetail() {
                     </span>
                   )}
                 </div>
-                {selectedPage.page_image_url && (
-                  <button
-                    onClick={() => setShowText(!showText)}
-                    className="flex items-center gap-2 px-3 py-1 text-sm text-blue-600 hover:text-blue-500 border border-blue-200 rounded-md hover:bg-blue-50"
-                  >
-                    <Eye className="w-4 h-4" />
-                    {showText ? "Show Image" : "Show Text"}
-                  </button>
-                )}
+                <div className="flex items-center gap-3">
+                  {/* Translation Button */}
+                  {selectedPage.original_text && !selectedPage.id_translation && (
+                    <button
+                      onClick={handleTranslate}
+                      disabled={isTranslating}
+                      className="flex items-center gap-2 px-3 py-1 text-sm text-green-600 hover:text-green-500 border border-green-200 rounded-md hover:bg-green-50 disabled:opacity-50"
+                    >
+                      <Languages className="w-4 h-4" />
+                      {isTranslating ? "Translating..." : "Translate to Bahasa"}
+                    </button>
+                  )}
+                  
+                  {/* Show Translation Button */}
+                  {selectedPage.id_translation && (
+                    <button
+                      onClick={() => setShowTranslationModal(true)}
+                      className="flex items-center gap-2 px-3 py-1 text-sm text-green-600 hover:text-green-500 border border-green-200 rounded-md hover:bg-green-50"
+                    >
+                      <Languages className="w-4 h-4" />
+                      Show Translation
+                    </button>
+                  )}
+                  
+                  {/* Show Text/Image Button */}
+                  {selectedPage.page_image_url && (
+                    <button
+                      onClick={() => setShowText(!showText)}
+                      className="flex items-center gap-2 px-3 py-1 text-sm text-blue-600 hover:text-blue-500 border border-blue-200 rounded-md hover:bg-blue-50"
+                    >
+                      <Eye className="w-4 h-4" />
+                      {showText ? "Show Image" : "Show Text"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Page Content */}
@@ -530,6 +603,77 @@ export default function BookDetail() {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Translation Modal */}
+      {showTranslationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex">
+            {/* Left side - Original Text */}
+            <div className="flex-1 p-6 border-r border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Original Text</h3>
+              </div>
+              <div className="h-full overflow-y-auto">
+                {selectedPage?.page_image_url ? (
+                  <img
+                    src={selectedPage.page_image_url}
+                    alt={`Page ${selectedPage.page_number}`}
+                    className="w-full h-auto max-h-[70vh] object-contain rounded-lg"
+                  />
+                ) : (
+                  <div className="text-gray-800 leading-relaxed whitespace-pre-wrap text-sm">
+                    {selectedPage?.original_text}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right side - Translation */}
+            <div className="flex-1 p-6 bg-gray-50">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Indonesian Translation</h3>
+                <button
+                  onClick={() => setShowTranslationModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="h-full overflow-y-auto">
+                {isTranslating ? (
+                  <div className="flex items-center justify-center h-32">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                    <span className="ml-3 text-gray-600">Translating...</span>
+                  </div>
+                ) : translationError ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-red-800">{translationError}</p>
+                    <button
+                      onClick={handleTranslate}
+                      className="mt-2 text-sm text-red-600 hover:text-red-500 underline"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : (
+                  <div 
+                    className="text-gray-800 leading-relaxed" 
+                    style={{ 
+                      fontSize: '14px', 
+                      lineHeight: '1.7',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word'
+                    }}
+                  >
+                    {translation || selectedPage?.id_translation}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

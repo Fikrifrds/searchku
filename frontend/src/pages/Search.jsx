@@ -295,7 +295,8 @@ function SearchResultCard({ result, navigate }) {
     try {
       const response = await apiClient.translatePage({
         page_id: page_id,
-        target_language: 'id'
+        target_language: 'id',
+        use_image: true  // Use image-based translation with Gemini
       });
 
       if (response.success) {
@@ -445,33 +446,48 @@ function SearchResultCard({ result, navigate }) {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="flex gap-4 max-w-full max-h-[90vh]">
-              {/* Image section */}
-              <div className="flex-1">
-                <img
-                  src={page_image_url}
-                  alt={`Page ${page_number} from ${book_title}`}
-                  className="w-full h-auto max-h-[90vh] object-contain rounded-lg"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-              
-              {/* Translation section - side by side */}
-              {(translation || id_translation) && (
-                <div className="flex-1 bg-white bg-opacity-95 rounded-lg p-4 max-h-[90vh] overflow-y-auto">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Terjemahan Bahasa Indonesia:</h4>
-                  <p className="text-sm text-gray-800 leading-relaxed">
-                    {translation || id_translation}
-                  </p>
-                  <button
-                    onClick={() => setTranslation(null)}
-                    className="mt-2 text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    Hide translation
-                  </button>
-                </div>
-              )}
-            </div>
+            <div className="flex gap-6 max-w-full max-h-[90vh]">
+               {/* Image section */}
+               <div className="flex-1">
+                 <img
+                   src={page_image_url}
+                   alt={`Page ${page_number} from ${book_title}`}
+                   className="w-full h-auto max-h-[90vh] object-contain rounded-lg shadow-lg"
+                   onClick={(e) => e.stopPropagation()}
+                 />
+               </div>
+               
+               {/* Translation section - side by side */}
+                {(translation || id_translation) && (
+                  <div className="flex-1 bg-white border border-gray-200 rounded-lg p-6 max-h-[90vh] overflow-y-auto shadow-sm">
+                    <div className="mb-4">
+                      <h4 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
+                        <span className="mr-2">🇮🇩</span>
+                        Terjemahan Bahasa Indonesia
+                      </h4>
+                    </div>
+                    
+                    <div 
+                       className="text-gray-800 leading-relaxed" 
+                       style={{ 
+                         fontSize: '14px', 
+                         lineHeight: '1.7',
+                         whiteSpace: 'pre-wrap',
+                         wordBreak: 'break-word'
+                       }}
+                     >
+                       {(translation || id_translation)}
+                     </div>
+                    
+                    <button
+                      onClick={() => setTranslation(null)}
+                      className="mt-6 px-4 py-2 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700 transition-colors"
+                    >
+                      Tutup Terjemahan
+                    </button>
+                  </div>
+                )}
+             </div>
           </div>
         </div>
       )}

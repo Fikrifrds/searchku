@@ -30,11 +30,19 @@ async def translate_page(request: TranslationRequest, db: Session = Depends(get_
                 detail=f"Page with ID {request.page_id} not found"
             )
 
-        # Translate the text
-        translated_text = await translation_service.translate_text(
-            text=page.original_text,
-            target_language=request.target_language
-        )
+        # Translate using image or text
+        if request.use_image and page.page_image_url:
+            translated_text = await translation_service.translate_from_image(
+                image_url=page.page_image_url,
+                target_language=request.target_language
+            )
+            used_image = True
+        else:
+            translated_text = await translation_service.translate_text(
+                text=page.original_text,
+                target_language=request.target_language
+            )
+            used_image = False
 
         # Store translation in appropriate database field
         if request.target_language == "en":
@@ -52,6 +60,7 @@ async def translate_page(request: TranslationRequest, db: Session = Depends(get_
             translated_text=translated_text,
             target_language=request.target_language,
             stored_in_db=True,
+            used_image=used_image,
             success=True
         )
     except HTTPException:
