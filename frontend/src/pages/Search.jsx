@@ -267,6 +267,9 @@ export default function Search() {
 function SearchResultCard({ result, navigate }) {
   const [showText, setShowText] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [translation, setTranslation] = useState(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(false);
   const {
     page_id,
     book_id,
@@ -283,6 +286,27 @@ function SearchResultCard({ result, navigate }) {
 
   const handleGoToDetail = () => {
     navigate(`/books/${book_id}?page=${page_number}`);
+  };
+
+  const handleTranslate = async () => {
+    if (!page_id || isTranslating) return;
+
+    setIsTranslating(true);
+    try {
+      const response = await apiClient.translatePage({
+        page_id: page_id,
+        target_language: 'id'
+      });
+
+      if (response.success) {
+        setTranslation(response.translated_text);
+        setShowTranslation(true);
+      }
+    } catch (error) {
+      console.error('Translation failed:', error);
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   return (
@@ -319,6 +343,14 @@ function SearchResultCard({ result, navigate }) {
               className="text-sm text-blue-600 hover:text-blue-500 font-medium px-3 py-1 rounded-md border border-blue-200 hover:bg-blue-50"
             >
               {showText ? "Show Image" : "Show Text"}
+            </button>
+          )}
+          {id_translation && (
+            <button
+              onClick={() => setShowTranslation(!showTranslation)}
+              className="text-sm text-purple-600 hover:text-purple-500 font-medium px-3 py-1 rounded-md border border-purple-200 hover:bg-purple-50"
+            >
+              {showTranslation ? "Hide Translation" : "Show Translation"}
             </button>
           )}
           <button
@@ -372,7 +404,7 @@ function SearchResultCard({ result, navigate }) {
             )}
 
             {/* Indonesian Translation if available */}
-            {id_translation && (
+            {id_translation && showTranslation && (
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Indonesian Translation:</h4>
                 <div className="p-4 bg-green-50 rounded-lg">
@@ -396,18 +428,50 @@ function SearchResultCard({ result, navigate }) {
             className="relative max-w-7xl max-h-full"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-white hover:text-gray-300 bg-black bg-opacity-50 rounded-full p-2 z-10"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            <img
-              src={page_image_url}
-              alt={`Page ${page_number} from ${book_title}`}
-              className="max-w-full max-h-[90vh] object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
-            />
+            <div className="absolute top-4 right-4 flex items-center space-x-2 z-10">
+              {!id_translation && (
+                <button
+                  onClick={handleTranslate}
+                  disabled={isTranslating}
+                  className="text-white hover:text-gray-300 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  {isTranslating ? 'Translating...' : 'Translate to Bahasa'}
+                </button>
+              )}
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-white hover:text-gray-300 bg-black bg-opacity-50 rounded-full p-2"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex gap-4 max-w-full max-h-[90vh]">
+              {/* Image section */}
+              <div className="flex-1">
+                <img
+                  src={page_image_url}
+                  alt={`Page ${page_number} from ${book_title}`}
+                  className="w-full h-auto max-h-[90vh] object-contain rounded-lg"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              
+              {/* Translation section - side by side */}
+              {(translation || id_translation) && (
+                <div className="flex-1 bg-white bg-opacity-95 rounded-lg p-4 max-h-[90vh] overflow-y-auto">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Terjemahan Bahasa Indonesia:</h4>
+                  <p className="text-sm text-gray-800 leading-relaxed">
+                    {translation || id_translation}
+                  </p>
+                  <button
+                    onClick={() => setTranslation(null)}
+                    className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Hide translation
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

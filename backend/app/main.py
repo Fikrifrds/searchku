@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from .routers import books, pages, search
+from .routers import books, pages, search, translation
 from .database import engine
 from .models import Base
 
@@ -43,6 +43,7 @@ app.add_middleware(
 app.include_router(books.router, prefix="/api/books", tags=["books"])
 app.include_router(pages.router, prefix="/api", tags=["pages"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
+app.include_router(translation.router, prefix="/api", tags=["translation"])
 
 # Health check endpoint
 @app.get("/health")
