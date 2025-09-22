@@ -472,8 +472,8 @@ class FileService:
 
     async def _process_pdf_with_smart_ocr(self, content: bytes, filename: str, book_id: int) -> list:
         """
-        Process PDF with intelligent OCR detection per page.
-        Uses text extraction for readable pages and OCR for image-only pages.
+        Process PDF using Gemini OCR for all pages.
+        Always extracts text from page images using Gemini OCR to avoid messy PDF text extraction.
         Also generates page images and uploads them to S3.
 
         Args:
@@ -505,157 +505,91 @@ class FileService:
                         detail="PDF is password protected and cannot be processed"
                     )
 
-            # Process each page individually
+            # Process each page individually using Gemini OCR for all pages
             for page_num in range(pdf_document.page_count):
                 try:
-                    logger.info(f"Processing page {page_num + 1}/{pdf_document.page_count}")
+                    logger.info(f"Processing page {page_num + 1}/{pdf_document.page_count} with Gemini OCR")
                     page = pdf_document[page_num]
 
-                    # First, try to extract text using PyMuPDF
-                    page_text = page.get_text()
-                    text_length = len(page_text.strip()) if page_text else 0
+                    # Always extract text using Gemini OCR from page images
+                    try:
+                        # Get page as high-quality image for Gemini OCR
+                        pix = page.get_pixmap(dpi=300)  # Good quality for OCR
+                        img_data = pix.tobytes("png")
 
-                    # Determine if the page has meaningful text
-                    # Consider a page to have text if it has more than 50 characters of non-whitespace content
-                    has_meaningful_text = text_length > 50
+                        # Convert to PIL Image for Gemini OCR
+                        from PIL import Image
+                        img = Image.open(io.BytesIO(img_data))
 
-                    # Also check for common non-text content indicators
-                    if has_meaningful_text:
-                        # Remove common PDF artifacts and see if substantial text remains
-                        cleaned_text = page_text.strip()
-                        # Remove page numbers, headers, footers (very short lines)
-                        lines = [line.strip() for line in cleaned_text.split('\n') if line.strip()]
-                        substantial_lines = [line for line in lines if len(line) > 10]
+                        # Convert to RGB if needed (Gemini works better with RGB)
+                        if img.mode != 'RGB':
+                            img = img.convert('RGB')
 
-                        # If most lines are very short, it might be metadata/artifacts
-                        if len(substantial_lines) < len(lines) * 0.3:
-                            has_meaningful_text = False
-                        else:
-                            # Check for actual content
-                            text_sample = ' '.join(substantial_lines[:5])
-                            if len(text_sample) < 30:
-                                has_meaningful_text = False
+                        logger.info(f"Using Gemini OCR for page {page_num + 1}")
+                        gemini_text = await ocr_service.extract_text_from_pil_image(img)
 
-                    if has_meaningful_text:
-                        # Use extracted text
-                        logger.info(f"Page {page_num + 1}: Using text extraction ({text_length} characters)")
-                        cleaned_text = page_text.strip()
-                        if cleaned_text:
-                            # Generate page image
+                        # Clean and process the extracted text
+                        extracted_text = gemini_text.strip() if gemini_text else ""
+                        if extracted_text:
+                            extracted_text = self._clean_arabic_ocr_text(extracted_text)
+
+                        if extracted_text and len(extracted_text) > 10:
+                            logger.info(f"Page {page_num + 1}: Gemini OCR extracted {len(extracted_text)} characters")
+
+                            # Generate page image for display
                             page_image_url = await self._generate_page_image(page, page_num + 1, book_id)
 
                             pages.append({
-                                'text': cleaned_text,
-                                'extraction_method': 'text_extraction',
+                                'text': extracted_text,
+                                'extraction_method': 'gemini_ocr',
+                                'page_number': page_num + 1,
+                                'page_image_url': page_image_url
+                            })
+                        else:
+                            logger.warning(f"Page {page_num + 1}: Gemini OCR produced no meaningful text")
+
+                            # Still create page image even if no text extracted
+                            page_image_url = await self._generate_page_image(page, page_num + 1, book_id)
+
+                            pages.append({
+                                'text': '',
+                                'extraction_method': 'gemini_ocr_empty',
                                 'page_number': page_num + 1,
                                 'page_image_url': page_image_url
                             })
 
-                    else:
-                        # Page appears to be image-only, use OCR
-                        logger.info(f"Page {page_num + 1}: No meaningful text found, using OCR")
+                    except Exception as ocr_error:
+                        logger.error(f"Gemini OCR failed for page {page_num + 1}: {str(ocr_error)}")
 
+                        # Still create page image even if OCR fails
                         try:
-                            # Get page as image for OCR
-                            pix = page.get_pixmap(dpi=400)
-                            img_data = pix.tobytes("png")
-
-                            # Convert to PIL Image and enhance for OCR
-                            from PIL import Image, ImageEnhance, ImageFilter
-                            img = Image.open(io.BytesIO(img_data))
-
-                            if img.mode != 'L':
-                                img = img.convert('L')
-
-                            # Enhance image
-                            enhancer = ImageEnhance.Contrast(img)
-                            img = enhancer.enhance(1.2)
-                            enhancer = ImageEnhance.Sharpness(img)
-                            img = enhancer.enhance(1.5)
-                            img = img.filter(ImageFilter.MedianFilter(size=3))
-
-                            # Resize if needed
-                            width, height = img.size
-                            if width < 1000 or height < 1000:
-                                scale_factor = max(1000/width, 1000/height)
-                                new_width = int(width * scale_factor)
-                                new_height = int(height * scale_factor)
-                                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-                            # Try multiple OCR configurations
-                            ocr_configs = [
-                                (r'--oem 3 --psm 6 -l ara -c preserve_interword_spaces=1', "PSM 6"),
-                                (r'--oem 3 --psm 1 -l ara -c preserve_interword_spaces=1', "PSM 1"),
-                                (r'--oem 3 --psm 7 -l ara -c preserve_interword_spaces=1', "PSM 7"),
-                            ]
-
-                            best_text = ""
-                            best_length = 0
-
-                            # Try Gemini OCR first
-                            try:
-                                logger.info(f"Using Gemini OCR for page {page_num}")
-                                gemini_text = await ocr_service.extract_text_from_pil_image(img)
-                                if len(gemini_text.strip()) > 0:
-                                    best_text = gemini_text
-                                    best_length = len(gemini_text.strip())
-                                    logger.info(f"Gemini OCR extracted {best_length} characters for page {page_num}")
-                                else:
-                                    raise Exception("Gemini OCR returned empty text")
-
-                            except Exception as gemini_error:
-                                logger.warning(f"Gemini OCR failed for page {page_num}: {gemini_error}")
-                                logger.info("Falling back to traditional OCR")
-
-                                # Fallback to traditional OCR
-                                for config, desc in ocr_configs:
-                                    try:
-                                        text_result = pytesseract.image_to_string(img, config=config)
-                                        if len(text_result.strip()) > best_length:
-                                            best_text = text_result
-                                            best_length = len(text_result.strip())
-                                            if best_length > 100:
-                                                break
-                                    except Exception:
-                                        continue
-
-                            ocr_text = best_text.strip()
-                            if ocr_text:
-                                ocr_text = self._clean_arabic_ocr_text(ocr_text)
-
-                            if ocr_text and len(ocr_text) > 10:
-                                logger.info(f"Page {page_num + 1}: OCR extracted {len(ocr_text)} characters")
-
-                                # Generate page image
-                                page_image_url = await self._generate_page_image(page, page_num + 1, book_id)
-
-                                pages.append({
-                                    'text': ocr_text,
-                                    'extraction_method': 'ocr',
-                                    'page_number': page_num + 1,
-                                    'page_image_url': page_image_url
-                                })
-                            else:
-                                logger.warning(f"Page {page_num + 1}: OCR produced no meaningful text")
-
-                        except Exception as ocr_error:
-                            logger.error(f"OCR failed for page {page_num + 1}: {str(ocr_error)}")
+                            page_image_url = await self._generate_page_image(page, page_num + 1, book_id)
+                            pages.append({
+                                'text': '',
+                                'extraction_method': 'ocr_failed',
+                                'page_number': page_num + 1,
+                                'page_image_url': page_image_url
+                            })
+                        except Exception as img_error:
+                            logger.error(f"Failed to generate page image for page {page_num + 1}: {str(img_error)}")
 
                 except Exception as page_error:
                     logger.error(f"Error processing page {page_num + 1}: {str(page_error)}")
 
             pdf_document.close()
 
-            # Filter out empty pages
+            # Filter out pages with meaningful text (keep all pages for image display)
+            all_pages = pages
             valid_pages = [p for p in pages if p.get('text', '').strip()]
-            logger.info(f"PDF processing completed: {len(valid_pages)} valid pages out of {len(pages)} total pages")
+            logger.info(f"PDF processing completed: {len(valid_pages)} pages with text out of {len(all_pages)} total pages")
 
             # Log extraction method summary
-            text_extraction_count = len([p for p in valid_pages if p.get('extraction_method') == 'text_extraction'])
-            ocr_count = len([p for p in valid_pages if p.get('extraction_method') == 'ocr'])
-            logger.info(f"Extraction methods used - Text extraction: {text_extraction_count}, OCR: {ocr_count}")
+            gemini_ocr_count = len([p for p in all_pages if p.get('extraction_method') == 'gemini_ocr'])
+            gemini_ocr_empty_count = len([p for p in all_pages if p.get('extraction_method') == 'gemini_ocr_empty'])
+            ocr_failed_count = len([p for p in all_pages if p.get('extraction_method') == 'ocr_failed'])
+            logger.info(f"Extraction results - Gemini OCR success: {gemini_ocr_count}, Empty results: {gemini_ocr_empty_count}, Failed: {ocr_failed_count}")
 
-            return valid_pages
+            return all_pages  # Return all pages including those without text for image display
 
         except HTTPException:
             raise
