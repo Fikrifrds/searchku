@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, Ch
 import { useBookStore, usePageStore } from '../lib/store';
 import { apiClient } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useModalScrollPrevention } from '../hooks/useModalScrollPrevention';
 
 
 
@@ -121,6 +122,9 @@ export default function BookDetail() {
       document.removeEventListener('keydown', handleEscKey);
     };
   }, [showTranslationModal, showFileUploadForm]);
+
+  // Prevent background scrolling when modals are open
+  useModalScrollPrevention(showTranslationModal || showFileUploadForm);
 
   // Function to handle page navigation with URL update
   const handlePageSelect = (pageNumber) => {
@@ -598,112 +602,114 @@ export default function BookDetail() {
       {/* Translation Modal */}
       {showTranslationModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex">
+          <div className="bg-white rounded-lg w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
             {/* Left side - Original Text */}
-            <div className="flex-1 p-6 border-r border-gray-200">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Original Text</h3>
-              </div>
-              <div className="h-full overflow-y-auto">
-                {selectedPage?.page_image_url ? (
-                  <img
-                    src={selectedPage.page_image_url}
-                    alt={`Page ${selectedPage.page_number}`}
-                    className="w-full h-auto max-h-[70vh] object-contain rounded-lg"
-                  />
-                ) : (
-                  <div className="text-gray-800 leading-relaxed whitespace-pre-wrap text-sm">
-                    {selectedPage?.original_text}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right side - Translation */}
-            <div className="flex-1 p-6 bg-gray-50">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Indonesian Translation</h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handlePrevPage}
-                      disabled={selectedPageNumber <= 1}
-                      className={cn(
-                        "p-2 rounded-lg transition-colors",
-                        selectedPageNumber <= 1
-                          ? "text-gray-300 cursor-not-allowed"
-                          : "text-gray-600 hover:text-gray-800 hover:bg-gray-200"
-                      )}
-                      title="Previous page"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <span className="text-sm text-gray-500 px-2">
-                      Page {selectedPageNumber} of {bookPages.length}
-                    </span>
-                    <button
-                      onClick={handleNextPage}
-                      disabled={selectedPageNumber >= bookPages.length}
-                      className={cn(
-                        "p-2 rounded-lg transition-colors",
-                        selectedPageNumber >= bookPages.length
-                          ? "text-gray-300 cursor-not-allowed"
-                          : "text-gray-600 hover:text-gray-800 hover:bg-gray-200"
-                      )}
-                      title="Next page"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
+            <div className="flex flex-1 min-h-0">
+              <div className="flex-1 flex flex-col border-r border-gray-200">
+                <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900">Original Text</h3>
                 </div>
-                <button
-                  onClick={() => setShowTranslationModal(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="w-6 h-6" />
-                </button>
+                <div className="flex-1 p-6 pt-4 overflow-y-auto">
+                  {selectedPage?.page_image_url ? (
+                    <img
+                      src={selectedPage.page_image_url}
+                      alt={`Page ${selectedPage.page_number}`}
+                      className="w-full h-auto object-contain rounded-lg"
+                    />
+                  ) : (
+                    <div className="text-gray-800 leading-relaxed whitespace-pre-wrap text-sm">
+                      {selectedPage?.original_text}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="overflow-y-auto">
-                {isTranslating ? (
-                  <div className="flex items-center justify-center h-32">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-                    <span className="ml-3 text-gray-600">Translating...</span>
+              {/* Right side - Translation */}
+              <div className="flex-1 flex flex-col bg-gray-50">
+                <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200">
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Indonesian Translation</h3>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handlePrevPage}
+                        disabled={selectedPageNumber <= 1}
+                        className={cn(
+                          "p-2 rounded-lg transition-colors",
+                          selectedPageNumber <= 1
+                            ? "text-gray-300 cursor-not-allowed"
+                            : "text-gray-600 hover:text-gray-800 hover:bg-gray-200"
+                        )}
+                        title="Previous page"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      <span className="text-sm text-gray-500 px-2">
+                        Page {selectedPageNumber} of {bookPages.length}
+                      </span>
+                      <button
+                        onClick={handleNextPage}
+                        disabled={selectedPageNumber >= bookPages.length}
+                        className={cn(
+                          "p-2 rounded-lg transition-colors",
+                          selectedPageNumber >= bookPages.length
+                            ? "text-gray-300 cursor-not-allowed"
+                            : "text-gray-600 hover:text-gray-800 hover:bg-gray-200"
+                        )}
+                        title="Next page"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
-                ) : translationError ? (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="text-red-800">{translationError}</p>
-                    <button
-                      onClick={handleTranslate}
-                      className="mt-2 text-sm text-red-600 hover:text-red-500 underline"
-                    >
-                      Try again
-                    </button>
-                  </div>
-                ) : translation || selectedPage?.id_translation ? (
-                  <div 
-                    className="text-gray-800 leading-relaxed" 
-                    style={{ 
-                      fontSize: '14px', 
-                      lineHeight: '1.7',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word'
-                    }}
+                  <button
+                    onClick={() => setShowTranslationModal(false)}
+                    className="text-gray-500 hover:text-gray-700"
                   >
-                    {translation || selectedPage?.id_translation}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-32 text-center">
-                    <p className="text-gray-500 mb-4">No translation available for this page</p>
-                    <button
-                      onClick={handleTranslate}
-                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="flex-1 p-6 pt-4 overflow-y-auto">
+                  {isTranslating ? (
+                    <div className="flex items-center justify-center h-32">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                      <span className="ml-3 text-gray-600">Translating...</span>
+                    </div>
+                  ) : translationError ? (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-red-800">{translationError}</p>
+                      <button
+                        onClick={handleTranslate}
+                        className="mt-2 text-sm text-red-600 hover:text-red-500 underline"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  ) : translation || selectedPage?.id_translation ? (
+                    <div 
+                      className="text-gray-800 leading-relaxed" 
+                      style={{ 
+                        fontSize: '14px', 
+                        lineHeight: '1.7',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word'
+                      }}
                     >
-                      <Languages className="w-4 h-4 mr-2" />
-                      Translate Page
-                    </button>
-                  </div>
-                )}
+                      {translation || selectedPage?.id_translation}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-32 text-center">
+                      <p className="text-gray-500 mb-4">No translation available for this page</p>
+                      <button
+                        onClick={handleTranslate}
+                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Languages className="w-4 h-4 mr-2" />
+                        Translate Page
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

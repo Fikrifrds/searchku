@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, BookOpen, Edit, Trash2, Upload } from 'lucide-react';
 import { useBookStore } from '../lib/store';
-
+import { useModalScrollPrevention } from '../hooks/useModalScrollPrevention';
 import { cn } from '../lib/utils';
 
 export default function Books() {
   const { books, loading, error, fetchBooks, deleteBook } = useBookStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  
+  // Prevent background scrolling when modal is open
+  useModalScrollPrevention(showCreateForm);
 
   useEffect(() => {
     fetchBooks();

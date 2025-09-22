@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Search as SearchIcon, Book, X, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search as SearchIcon, Book, X, ExternalLink, ChevronLeft, ChevronRight, Languages } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBookStore } from '../lib/store';
 import { apiClient } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useModalScrollPrevention } from '../hooks/useModalScrollPrevention';
 
 export default function Search() {
   const navigate = useNavigate();
@@ -427,6 +428,9 @@ function SearchResultCard({ result, navigate }) {
   const [translation, setTranslation] = useState(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
+  
+  // Prevent background scrolling when modal is open
+  useModalScrollPrevention(showModal);
   const {
     page_id,
     book_id,
@@ -494,30 +498,30 @@ function SearchResultCard({ result, navigate }) {
         </div>
 
         {/* Action Buttons */}
-        <div className="mt-3 flex items-center space-x-2">
-          {page_image_url && (
+        <div className="mt-3 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            {page_image_url && (
+              <button
+                onClick={() => setShowText(!showText)}
+                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-colors duration-200"
+              >
+                {showText ? "Show Image" : "Show Text"}
+              </button>
+            )}
             <button
-              onClick={() => setShowText(!showText)}
-              className="text-sm text-blue-600 hover:text-blue-500 font-medium px-3 py-1 rounded-md border border-blue-200 hover:bg-blue-50"
+              onClick={handleGoToDetail}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 hover:border-green-300 transition-colors duration-200"
             >
-              {showText ? "Show Image" : "Show Text"}
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Go to Detail</span>
             </button>
-          )}
+          </div>
           {id_translation && (
-            <button
-              onClick={() => setShowTranslation(!showTranslation)}
-              className="text-sm text-purple-600 hover:text-purple-500 font-medium px-3 py-1 rounded-md border border-purple-200 hover:bg-purple-50"
-            >
-              {showTranslation ? "Hide Translation" : "Show Translation"}
-            </button>
+            <div className="flex items-center space-x-1 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg">
+              <Languages className="w-4 h-4 text-purple-600" />
+              <span className="text-xs font-medium text-purple-700">Translation</span>
+            </div>
           )}
-          <button
-            onClick={handleGoToDetail}
-            className="text-sm text-green-600 hover:text-green-500 font-medium px-3 py-1 rounded-md border border-green-200 hover:bg-green-50 flex items-center space-x-1"
-          >
-            <ExternalLink className="w-3 h-3" />
-            <span>Go to Detail</span>
-          </button>
         </div>
       </div>
 
