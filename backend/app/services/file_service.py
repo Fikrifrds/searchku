@@ -21,7 +21,7 @@ class FileService:
     def __init__(self):
         self.upload_dir = Path("uploads")
         self.covers_dir = self.upload_dir / "covers"
-        self.max_file_size = 10 * 1024 * 1024  # 10MB
+        self.max_file_size = int(os.getenv("MAX_FILE_SIZE", 10 * 1024 * 1024))  # Default to 10MB if not set
         self.allowed_image_types = {"image/jpeg", "image/png", "image/webp"}
         
         # Create directories if they don't exist

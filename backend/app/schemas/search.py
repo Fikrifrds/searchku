@@ -8,6 +8,7 @@ class SearchRequest(BaseModel):
     offset: Optional[int] = 0
     similarity_threshold: Optional[float] = 0.7
     query_language: Optional[str] = None  # 'en', 'id', 'ar', or None for auto-detection
+    book_id: Optional[int] = None  # Filter by specific book
 
 class SearchResult(BaseModel):
     page_id: int

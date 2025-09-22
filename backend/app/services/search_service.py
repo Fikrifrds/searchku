@@ -20,7 +20,8 @@ class SearchService:
         db: Session,
         query: str,
         limit: Optional[int] = None,
-        similarity_threshold: Optional[float] = None
+        similarity_threshold: Optional[float] = None,
+        book_id: Optional[int] = None
     ) -> List[SearchResult]:
         """
         Perform semantic search using vector similarity.
@@ -54,7 +55,8 @@ class SearchService:
             # Perform vector similarity search using pgvector
             # Using cosine similarity (1 - cosine_distance)
             # Cast the query embedding to vector type for pgvector compatibility
-            sql_query = text("""
+            book_filter = "AND p.book_id = :book_id" if book_id else ""
+            sql_query = text(f"""
                 SELECT
                     p.id,
                     p.book_id,
@@ -71,18 +73,20 @@ class SearchService:
                 JOIN books b ON p.book_id = b.id
                 WHERE p.embedding_vector IS NOT NULL
                     AND 1 - (p.embedding_vector <=> CAST(:query_embedding AS vector)) >= :similarity_threshold
+                    {book_filter}
                 ORDER BY p.embedding_vector <=> CAST(:query_embedding AS vector)
                 LIMIT :limit
             """)
             
-            result = db.execute(
-                sql_query,
-                {
-                    "query_embedding": query_embedding,
-                    "similarity_threshold": similarity_threshold,
-                    "limit": limit
-                }
-            )
+            search_params = {
+                "query_embedding": query_embedding,
+                "similarity_threshold": similarity_threshold,
+                "limit": limit
+            }
+            if book_id:
+                search_params["book_id"] = book_id
+
+            result = db.execute(sql_query, search_params)
             
             rows = result.fetchall()
             print(f"SEMANTIC SEARCH: Database query returned {len(rows)} rows")
@@ -122,7 +126,8 @@ class SearchService:
         query_language: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        similarity_threshold: Optional[float] = None
+        similarity_threshold: Optional[float] = None,
+        book_id: Optional[int] = None
     ) -> tuple[List[SearchResult], int]:
         """
         Perform enhanced multilingual semantic search.
@@ -139,10 +144,10 @@ class SearchService:
             List of search results ordered by similarity score
         """
         try:
-            # Set defaults for multilingual search
-            limit = limit or self.default_limit
-            offset = offset or 0
-            similarity_threshold = similarity_threshold or self.multilingual_threshold
+            # Set defaults for multilingual search with null safety
+            limit = int(limit or self.default_limit)
+            offset = int(offset or 0)
+            similarity_threshold = float(similarity_threshold or self.multilingual_threshold)
 
             logger.info(f"Performing multilingual search for query: '{query}' in language: {query_language or 'auto'}")
             print(f"MULTILINGUAL SEARCH: Query: '{query}', Language: {query_language or 'auto'}, Threshold: {similarity_threshold}, Offset: {offset}, Limit: {limit}")
@@ -156,24 +161,27 @@ class SearchService:
                 return [], 0
 
             # First, get total count for pagination
-            count_query = text("""
+            book_filter = "AND p.book_id = :book_id" if book_id else ""
+            count_query = text(f"""
                 SELECT COUNT(*) as total_count
                 FROM pages p
                 WHERE p.embedding_vector IS NOT NULL
                     AND 1 - (p.embedding_vector <=> CAST(:query_embedding AS vector)) >= :similarity_threshold
+                    {book_filter}
             """)
 
-            count_result = db.execute(
-                count_query,
-                {
-                    "query_embedding": query_embedding,
-                    "similarity_threshold": similarity_threshold
-                }
-            )
+            count_params = {
+                "query_embedding": query_embedding,
+                "similarity_threshold": similarity_threshold
+            }
+            if book_id:
+                count_params["book_id"] = book_id
+
+            count_result = db.execute(count_query, count_params)
             total_count = count_result.fetchone().total_count
 
             # Enhanced SQL query that searches across original text and translations with pagination
-            sql_query = text("""
+            sql_query = text(f"""
                 SELECT
                     p.id,
                     p.book_id,
@@ -195,19 +203,21 @@ class SearchService:
                 JOIN books b ON p.book_id = b.id
                 WHERE p.embedding_vector IS NOT NULL
                     AND 1 - (p.embedding_vector <=> CAST(:query_embedding AS vector)) >= :similarity_threshold
+                    {book_filter}
                 ORDER BY p.embedding_vector <=> CAST(:query_embedding AS vector)
                 LIMIT :limit OFFSET :offset
             """)
 
-            result = db.execute(
-                sql_query,
-                {
-                    "query_embedding": query_embedding,
-                    "similarity_threshold": similarity_threshold,
-                    "limit": limit,
-                    "offset": offset
-                }
-            )
+            search_params = {
+                "query_embedding": query_embedding,
+                "similarity_threshold": similarity_threshold,
+                "limit": limit,
+                "offset": offset
+            }
+            if book_id:
+                search_params["book_id"] = book_id
+
+            result = db.execute(sql_query, search_params)
 
             rows = result.fetchall()
             logger.info(f"Multilingual search returned {len(rows)} results")
@@ -250,7 +260,8 @@ class SearchService:
         self,
         db: Session,
         query: str,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        book_id: Optional[int] = None
     ) -> List[SearchResult]:
         """
         Perform simple text-based search as fallback.
@@ -269,9 +280,11 @@ class SearchService:
             logger.info(f"Performing text search for query: '{query}' with limit: {limit}")
 
             # Simple text search using ILIKE
-            pages = db.query(Page, Book).join(Book).filter(
-                Page.original_text.ilike(f"%{query}%")
-            ).limit(limit).all()
+            query_filter = Page.original_text.ilike(f"%{query}%")
+            if book_id:
+                query_filter = query_filter & (Page.book_id == book_id)
+
+            pages = db.query(Page, Book).join(Book).filter(query_filter).limit(limit).all()
 
             print(f"TEXT SEARCH: Found {len(pages)} results")
             logger.info(f"Text search found {len(pages)} results")
@@ -303,16 +316,21 @@ class SearchService:
     def _generate_snippet(self, text: str, query: str, max_length: int = 200) -> str:
         """
         Generate a snippet from text highlighting the query terms.
-        
+
         Args:
             text: The full text
             query: The search query
             max_length: Maximum length of the snippet
-            
+
         Returns:
             Text snippet with query context
         """
         try:
+            # Ensure we have valid inputs
+            text = text or ""
+            query = query or ""
+            max_length = max(1, max_length)
+
             # Simple snippet generation
             if len(text) <= max_length:
                 return text
@@ -344,7 +362,9 @@ class SearchService:
             
         except Exception as e:
             logger.error(f"Error generating snippet: {str(e)}")
-            return text[:max_length] + "..." if len(text) > max_length else text
+            safe_text = text or ""
+            safe_max_length = max(1, max_length)
+            return safe_text[:safe_max_length] + "..." if len(safe_text) > safe_max_length else safe_text
 
     def _generate_multilingual_snippet(
         self,
@@ -371,6 +391,12 @@ class SearchService:
             Optimized snippet for multilingual display
         """
         try:
+            # Ensure we have valid text values
+            original_text = original_text or ""
+            en_translation = en_translation or ""
+            id_translation = id_translation or ""
+            query = query or ""
+
             # Determine best text to use for snippet based on query language
             snippet_text = original_text
             snippet_prefix = ""
@@ -393,13 +419,18 @@ class SearchService:
                     snippet_text = en_translation
                     snippet_prefix = "[EN] "
 
+            # Ensure snippet_prefix is not None and calculate safe max_length
+            snippet_prefix = snippet_prefix or ""
+            safe_max_length = max(1, max_length - len(snippet_prefix))
+
             # Generate the snippet from the selected text
-            base_snippet = self._generate_snippet(snippet_text, query, max_length - len(snippet_prefix))
+            base_snippet = self._generate_snippet(snippet_text, query, safe_max_length)
             return snippet_prefix + base_snippet
 
         except Exception as e:
             logger.error(f"Error generating multilingual snippet: {str(e)}")
-            return self._generate_snippet(original_text, query, max_length)
+            fallback_text = original_text or ""
+            return self._generate_snippet(fallback_text, query or "", max_length)
 
     def _is_english(self, text: str) -> bool:
         """Simple heuristic to detect if text is likely English."""

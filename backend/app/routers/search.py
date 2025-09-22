@@ -21,7 +21,8 @@ async def semantic_search(
             db=db,
             query=request.query,
             limit=request.limit,
-            similarity_threshold=request.similarity_threshold
+            similarity_threshold=request.similarity_threshold,
+            book_id=request.book_id
         )
         print(f"ROUTER: Semantic search returned {len(results)} results")
         
@@ -58,7 +59,8 @@ async def multilingual_search(
             query_language=request.query_language,
             limit=request.limit,
             offset=request.offset,
-            similarity_threshold=request.similarity_threshold
+            similarity_threshold=request.similarity_threshold,
+            book_id=request.book_id
         )
 
         print(f"ROUTER: Multilingual search returned {len(results)} results out of {total_count} total")
@@ -88,7 +90,8 @@ async def text_search(
         results = await search_service.text_search(
             db=db,
             query=request.query,
-            limit=request.limit
+            limit=request.limit,
+            book_id=request.book_id
         )
         print(f"ROUTER: Search service returned {len(results)} results")
         
