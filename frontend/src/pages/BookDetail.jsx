@@ -617,7 +617,7 @@ export default function BookDetail() {
                       className="w-full h-auto object-contain rounded-lg"
                     />
                   ) : (
-                    <div className="text-gray-800 leading-relaxed whitespace-pre-wrap text-sm">
+                    <div className="text-gray-800 leading-relaxed whitespace-pre-wrap text-sm" style={{ wordBreak: 'break-word', overflowWrap: 'break-word', textAlign: 'right', direction: 'rtl' }}>
                       {selectedPage?.original_text}
                     </div>
                   )}
@@ -792,12 +792,12 @@ function PageContent({ page, showText }) {
           <div>
             <h4 className="text-sm font-medium text-gray-700 mb-3">Original Text:</h4>
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className={cn(
+              <div className={cn(
                 "text-sm text-gray-800 leading-relaxed whitespace-pre-wrap",
                 !isExpanded && page.original_text.length > 500 && "line-clamp-6"
-              )}>
+              )} style={{ wordBreak: 'break-word', overflowWrap: 'break-word', textAlign: 'right', direction: 'rtl' }}>
                 {page.original_text}
-              </p>
+              </div>
               {page.original_text.length > 500 && (
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}

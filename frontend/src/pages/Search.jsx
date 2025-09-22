@@ -547,9 +547,9 @@ function SearchResultCard({ result, navigate }) {
             <div>
               <h4 className="text-sm font-medium text-gray-700 mb-2">Original Text:</h4>
               <div className="p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap" style={{ wordBreak: 'break-word', overflowWrap: 'break-word', textAlign: 'right', direction: 'rtl' }}>
                   {original_text}
-                </p>
+                </div>
               </div>
             </div>
 

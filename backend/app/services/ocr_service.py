@@ -40,21 +40,37 @@ class OCRService:
                 image = Image.open(image_path_or_url)
 
             prompt = """
-Extract ALL text from this image with ABSOLUTE ACCURACY.
+Extract ALL text from this image while preserving the EXACT visual layout and formatting.
 
-CRITICAL OCR REQUIREMENTS:
+CRITICAL LAYOUT PRESERVATION REQUIREMENTS:
 1. Extract ONLY the text that is visible in the image - do not add any interpretations
-2. Preserve the EXACT formatting, line breaks, and spacing as shown in the image
-3. If the text is in Arabic, extract it character by character with perfect accuracy
-4. Include page numbers, titles, headers, and all visible text elements
-5. Maintain the original structure and layout
-6. If text is partially cut off or unclear, extract only what you can clearly see
-7. Do not guess, interpret, or complete incomplete words
-8. Do not add any commentary or explanations
-9. If there are multiple columns, preserve the column structure
-10. Include punctuation marks and diacritics exactly as shown
+2. Preserve the EXACT spatial arrangement as it appears in the image:
+   - Maintain all line breaks exactly as shown
+   - Preserve spacing between words and paragraphs
+   - Keep indentation and margins
+   - Maintain vertical spacing between lines
+3. For Arabic text: Extract character by character with perfect accuracy including:
+   - All diacritics and vowel marks
+   - Proper right-to-left text direction
+   - Correct word spacing and punctuation
+4. Preserve document structure:
+   - Headers, titles, and subtitles with their positioning
+   - Page numbers and footnotes in their original locations
+   - Multiple columns as separate sections
+   - Bullet points, numbered lists with proper formatting
+5. Spacing and alignment:
+   - Use appropriate whitespace to match the visual layout
+   - Preserve paragraph breaks and section separations
+   - Maintain text alignment (centered, justified, etc.)
+6. Special formatting:
+   - Preserve any emphasis (spacing for bold/italic appearance)
+   - Keep table-like structures with appropriate spacing
+   - Maintain any special character arrangements
+7. If text is partially cut off or unclear, extract only what you can clearly see
+8. Do not guess, interpret, or complete incomplete words
+9. Do not add any commentary, explanations, or metadata
 
-Provide ONLY the extracted text with exact formatting:
+OUTPUT FORMAT: Provide ONLY the extracted text with exact visual formatting preserved using appropriate spacing, line breaks, and layout structure to match the original image as closely as possible.
 """
 
             # Generate content with image
@@ -74,26 +90,54 @@ Provide ONLY the extracted text with exact formatting:
 
         try:
             prompt = """
-Extract ALL text from this image with ABSOLUTE ACCURACY.
+Extract ALL text from this image while preserving the EXACT visual layout and formatting.
 
-CRITICAL OCR REQUIREMENTS:
+CRITICAL LAYOUT PRESERVATION REQUIREMENTS:
 1. Extract ONLY the text that is visible in the image - do not add any interpretations
-2. Preserve the EXACT formatting, line breaks, and spacing as shown in the image
-3. If the text is in Arabic, extract it character by character with perfect accuracy
-4. Include page numbers, titles, headers, and all visible text elements
-5. Maintain the original structure and layout
-6. If text is partially cut off or unclear, extract only what you can clearly see
-7. Do not guess, interpret, or complete incomplete words
-8. Do not add any commentary or explanations
-9. If there are multiple columns, preserve the column structure
-10. Include punctuation marks and diacritics exactly as shown
+2. Preserve the EXACT spatial arrangement as it appears in the image:
+   - Maintain all line breaks exactly as shown
+   - Preserve spacing between words and paragraphs
+   - Keep indentation and margins
+   - Maintain vertical spacing between lines
+3. For Arabic text: Extract character by character with perfect accuracy including:
+   - All diacritics and vowel marks
+   - Proper right-to-left text direction
+   - Correct word spacing and punctuation
+4. Preserve document structure:
+   - Headers, titles, and subtitles with their positioning
+   - Page numbers and footnotes in their original locations
+   - Multiple columns as separate sections
+   - Bullet points, numbered lists with proper formatting
+5. Spacing and alignment:
+   - Use appropriate whitespace to match the visual layout
+   - Preserve paragraph breaks and section separations
+   - Maintain text alignment (centered, justified, etc.)
+6. Special formatting:
+   - Preserve any emphasis (spacing for bold/italic appearance)
+   - Keep table-like structures with appropriate spacing
+   - Maintain any special character arrangements
+7. If text is partially cut off or unclear, extract only what you can clearly see
+8. Do not guess, interpret, or complete incomplete words
+9. Do not add any commentary, explanations, or metadata
 
-Provide ONLY the extracted text with exact formatting:
+OUTPUT FORMAT: Provide ONLY the extracted text with exact visual formatting preserved using appropriate spacing, line breaks, and layout structure to match the original image as closely as possible.
 """
 
             # Generate content with image
             response = self.model.generate_content([prompt, pil_image])
-            extracted_text = response.text.strip()
+            extracted_text = response.text
+
+            # Preserve original formatting - don't strip leading/trailing whitespace completely
+            # Only remove excessive whitespace while preserving intentional spacing
+            if extracted_text:
+                # Remove only the outermost leading/trailing whitespace but preserve internal formatting
+                lines = extracted_text.split('\n')
+                # Remove completely empty lines at the start and end only
+                while lines and not lines[0].strip():
+                    lines.pop(0)
+                while lines and not lines[-1].strip():
+                    lines.pop()
+                extracted_text = '\n'.join(lines)
 
             return extracted_text
 
