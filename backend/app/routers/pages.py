@@ -7,6 +7,7 @@ from ..models.book import Book
 from ..schemas.page import PageCreate, PageResponse, PageUpdate
 from ..services.embedding_service import embedding_service
 from ..services.file_service import file_service
+from ..services.ocr_service import ocr_service
 import json
 import logging
 
@@ -196,6 +197,70 @@ async def delete_page(
     db.delete(page)
     db.commit()
     return {"message": "Page deleted successfully"}
+
+@router.post("/books/{book_id}/pages/{page_number}/reextract-text", response_model=PageResponse)
+async def reextract_page_text(
+    book_id: int,
+    page_number: int,
+    db: Session = Depends(get_db)
+):
+    """Re-extract text from a page image and update the original_text and embedding."""
+    page = db.query(Page).filter(
+        Page.book_id == book_id,
+        Page.page_number == page_number
+    ).first()
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    if not page.page_image_url:
+        raise HTTPException(status_code=400, detail="Page has no image to extract text from")
+
+    try:
+        # Extract text from the page image using OCR service
+        logger.info(f"Re-extracting text from page {page_number} image: {page.page_image_url}")
+        extracted_text = await ocr_service.extract_text_from_image(page.page_image_url)
+
+        if not extracted_text or not extracted_text.strip():
+            raise HTTPException(status_code=400, detail="No text could be extracted from the image")
+
+        # Update the page's original text
+        page.original_text = extracted_text.strip()
+
+        # Generate new embedding for the updated text
+        logger.info(f"Generating new embedding for re-extracted text")
+        embedding_vector = await embedding_service.generate_embedding(page.original_text, task_type="RETRIEVAL_DOCUMENT")
+
+        # Ensure embedding_vector is properly formatted for pgvector
+        formatted_embedding = None
+        if embedding_vector is not None:
+            if isinstance(embedding_vector, (list, tuple)):
+                try:
+                    formatted_embedding = [float(x) for x in embedding_vector]
+                    logger.info(f"Converted embedding vector to list of {len(formatted_embedding)} floats")
+                except (ValueError, TypeError) as e:
+                    logger.error(f"Failed to convert embedding vector to floats: {str(e)}")
+                    formatted_embedding = None
+            else:
+                logger.error(f"Embedding vector is not a list/tuple: {type(embedding_vector)} - {embedding_vector}")
+                formatted_embedding = None
+
+        page.embedding_vector = formatted_embedding
+        page.embedding_model = embedding_service.model
+
+        # Clear any existing translations since the text has changed
+        page.en_translation = None
+        page.id_translation = None
+
+        db.commit()
+        db.refresh(page)
+
+        logger.info(f"Successfully re-extracted text for page {page_number}")
+        return page
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error re-extracting text for page {page_number}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to re-extract text: {str(e)}")
 
 @router.post("/books/{book_id}/upload-files")
 async def upload_files_bulk(

@@ -12,3 +12,17 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Arabic text font support */
+.font-arabic {
+  font-family: "Noto Sans Arabic", "Arabic Typesetting", "Traditional Arabic", "Tahoma", "DejaVu Sans", sans-serif;
+  font-feature-settings: "liga", "dlig", "calt";
+  text-rendering: optimizeLegibility;
+}
+
+/* RTL text alignment utilities */
+.text-rtl {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: bidi-override;
+}

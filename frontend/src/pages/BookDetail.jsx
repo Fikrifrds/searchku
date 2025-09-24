@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, forwardRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle, Eye, Languages, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, BookOpen, FileText, Upload, X, AlertCircle, CheckCircle, Eye, Languages, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useBookStore, usePageStore } from '../lib/store';
 import { apiClient } from '../lib/api';
 import { cn } from '../lib/utils';
@@ -34,6 +34,10 @@ export default function BookDetail() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState('');
   const [showTranslationModal, setShowTranslationModal] = useState(false);
+
+  // Re-extract states
+  const [isReextracting, setIsReextracting] = useState(false);
+  const [reextractError, setReextractError] = useState('');
   
   // File upload states
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -138,16 +142,16 @@ export default function BookDetail() {
   // Translation function
   const handleTranslate = async () => {
     if (!selectedPage?.id || !selectedPage?.original_text) return;
-    
+
     setIsTranslating(true);
     setTranslationError('');
     setShowTranslationModal(true);
-    
+
     try {
       const response = await apiClient.translateText({
         page_id: selectedPage.id,
         target_language: 'id',
-        use_image: true  // Use image-based translation with Gemini
+        use_image: false  // Use image-based translation with Gemini
       });
 
       if (response.success) {
@@ -160,6 +164,32 @@ export default function BookDetail() {
       setTranslationError('Translation failed. Please try again.');
     } finally {
       setIsTranslating(false);
+    }
+  };
+
+  // Re-extract text function
+  const handleReextractText = async () => {
+    if (!selectedPage?.id || !selectedPage?.page_image_url) return;
+
+    setIsReextracting(true);
+    setReextractError('');
+
+    try {
+      const updatedPage = await apiClient.reextractPageText(bookId.toString(), selectedPage.page_number);
+
+      // Update the page in the store
+      await fetchPages(bookId);
+
+      // Clear translations since the text has changed
+      setTranslation('');
+      setTranslationError('');
+
+      console.log('Text re-extracted successfully');
+    } catch (error) {
+      console.error('Re-extraction failed:', error);
+      setReextractError(error instanceof Error ? error.message : 'Re-extraction failed. Please try again.');
+    } finally {
+      setIsReextracting(false);
     }
   };
 
@@ -372,6 +402,18 @@ export default function BookDetail() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
+                  {/* Re-extract Text Button */}
+                  {selectedPage.page_image_url && (
+                    <button
+                      onClick={handleReextractText}
+                      disabled={isReextracting}
+                      className="flex items-center gap-2 px-3 py-1 text-sm text-orange-600 hover:text-orange-500 border border-orange-200 rounded-md hover:bg-orange-50 disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn("w-4 h-4", isReextracting && "animate-spin")} />
+                      {isReextracting ? "Re-extracting..." : "Re-extract Text"}
+                    </button>
+                  )}
+
                   {/* Translation Button */}
                   {selectedPage.original_text && (
                     <button
@@ -383,7 +425,7 @@ export default function BookDetail() {
                       {isTranslating ? "Translating..." : selectedPage.id_translation ? "Retranslate" : "Translate to Bahasa"}
                     </button>
                   )}
-                  
+
                   {/* Show Translation Button */}
                   {selectedPage.id_translation && (
                     <button
@@ -394,7 +436,7 @@ export default function BookDetail() {
                       Show Translation
                     </button>
                   )}
-                  
+
                   {/* Show Text/Image Button */}
                   {selectedPage.page_image_url && (
                     <button
@@ -407,6 +449,19 @@ export default function BookDetail() {
                   )}
                 </div>
               </div>
+
+              {/* Re-extract Error Display */}
+              {reextractError && (
+                <div className="mx-6 mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800">{reextractError}</p>
+                  <button
+                    onClick={() => setReextractError('')}
+                    className="text-xs text-red-600 hover:text-red-500 mt-1"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
 
               {/* Page Content */}
               <div className="flex-1 overflow-auto p-6">
@@ -617,7 +672,12 @@ export default function BookDetail() {
                       className="w-full h-auto object-contain rounded-lg"
                     />
                   ) : (
-                    <div className="text-gray-800 leading-relaxed whitespace-pre-wrap text-sm" style={{ wordBreak: 'break-word', overflowWrap: 'break-word', textAlign: 'right', direction: 'rtl' }}>
+                    <div className="text-gray-800 leading-relaxed whitespace-pre-wrap font-arabic" dir="rtl" style={{
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                      lineHeight: '1.8',
+                      fontSize: '16px'
+                    }}>
                       {selectedPage?.original_text}
                     </div>
                   )}
@@ -791,11 +851,16 @@ function PageContent({ page, showText }) {
           {/* Original Text */}
           <div>
             <h4 className="text-sm font-medium text-gray-700 mb-3">Original Text:</h4>
-            <div className="p-4 bg-gray-50 rounded-lg">
+            <div className="p-4 bg-gray-50 rounded-lg" dir="rtl">
               <div className={cn(
-                "text-sm text-gray-800 leading-relaxed whitespace-pre-wrap",
+                "text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-arabic",
                 !isExpanded && page.original_text.length > 500 && "line-clamp-6"
-              )} style={{ wordBreak: 'break-word', overflowWrap: 'break-word', textAlign: 'right', direction: 'rtl' }}>
+              )} style={{
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+                lineHeight: '1.8',
+                fontSize: '16px'
+              }}>
                 {page.original_text}
               </div>
               {page.original_text.length > 500 && (
