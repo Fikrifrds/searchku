@@ -151,7 +151,7 @@ export default function BookDetail() {
       const response = await apiClient.translateText({
         page_id: selectedPage.id,
         target_language: 'id',
-        use_image: false  // Use image-based translation with Gemini
+        use_image: true  // Use image-based translation with Gemini
       });
 
       if (response.success) {

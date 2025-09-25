@@ -108,37 +108,54 @@ class OCRService:
     def _get_ocr_prompt(self) -> str:
         """Get the OCR prompt for text extraction"""
         return """
-Extract ALL text from this image while preserving the EXACT visual layout and formatting.
+Extract ALL text from this image with intelligent formatting that preserves good structure while correcting scanning/layout errors.
 
-CRITICAL LAYOUT PRESERVATION REQUIREMENTS:
-1. Extract ONLY the text that is visible in the image - do not add any interpretations
-2. Preserve the EXACT spatial arrangement as it appears in the image:
-   - Maintain all line breaks exactly as shown
-   - Preserve spacing between words and paragraphs
-   - Keep indentation and margins
-   - Maintain vertical spacing between lines
-3. For Arabic text: Extract character by character with perfect accuracy including:
-   - All diacritics and vowel marks
-   - Proper right-to-left text direction
-   - Correct word spacing and punctuation
-4. Preserve document structure:
-   - Headers, titles, and subtitles with their positioning
-   - Page numbers and footnotes in their original locations
-   - Multiple columns as separate sections
-   - Bullet points, numbered lists with proper formatting
-5. Spacing and alignment:
-   - Use appropriate whitespace to match the visual layout
-   - Preserve paragraph breaks and section separations
-   - Maintain text alignment (centered, justified, etc.)
-6. Special formatting:
-   - Preserve any emphasis (spacing for bold/italic appearance)
-   - Keep table-like structures with appropriate spacing
-   - Maintain any special character arrangements
-7. If text is partially cut off or unclear, extract only what you can clearly see
-8. Do not guess, interpret, or complete incomplete words
-9. Do not add any commentary, explanations, or metadata
+INTELLIGENT TEXT EXTRACTION RULES:
 
-OUTPUT FORMAT: Provide ONLY the extracted text with exact visual formatting preserved using appropriate spacing, line breaks, and layout structure to match the original image as closely as possible.
+1. ACCURATE TEXT EXTRACTION:
+   - Extract every visible character EXACTLY as it appears - no additions or modifications
+   - If text has Arabic diacritics/harakat (َ ِ ُ ْ ّ ً ٌ ٍ), extract them exactly as shown
+   - If text has NO diacritics/harakat, do NOT add any - extract only what is visible
+   - Maintain proper Arabic right-to-left text direction
+   - Preserve exact punctuation and symbols as they appear
+   - NEVER add, remove, or modify any characters - be 100% faithful to the original
+
+2. SMART FORMATTING DECISIONS:
+   PRESERVE these good formatting elements:
+   - Proper paragraph breaks and sections
+   - Numbered lists and bullet points with correct indentation
+   - Headers and titles with appropriate spacing
+   - Meaningful line breaks between different topics
+   - Table-like structures with logical spacing
+
+   CORRECT these formatting issues:
+   - Text that appears misplaced due to scanning errors
+   - Awkward line breaks in the middle of sentences
+   - Inconsistent spacing that disrupts readability
+   - Text fragments that should be connected
+   - Layout artifacts from scanning/printing
+
+3. CONTENT ORGANIZATION:
+   - Group related text together logically
+   - Ensure sentences flow naturally
+   - Place page numbers and footnotes appropriately
+   - Maintain logical reading order for Arabic text
+   - Preserve meaningful structural elements (headings, lists, etc.)
+
+4. QUALITY STANDARDS:
+   - Text should be readable and well-formatted
+   - No broken sentences due to layout preservation
+   - Consistent spacing and indentation
+   - Natural flow while maintaining document structure
+   - Clear separation between different sections/topics
+
+5. OUTPUT FORMAT:
+   - Clean, readable Arabic text with proper formatting
+   - Use appropriate line breaks and spacing for readability
+   - Maintain document hierarchy and structure
+   - No commentary, explanations, or metadata
+
+GOAL: Produce clean, accurately formatted Arabic text that preserves the document's logical structure while correcting scanning/layout artifacts for optimal readability. CRITICAL: Extract text exactly as written - do not add harakat where none exist, do not remove harakat that are present. Be completely faithful to the original text content.
 """
 
     async def extract_text_from_pil_image(self, pil_image: Image.Image) -> str:
