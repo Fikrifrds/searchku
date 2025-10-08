@@ -5,6 +5,9 @@ from typing import Literal
 import requests
 from PIL import Image
 import io
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TranslationService:
     def __init__(self):
@@ -85,19 +88,47 @@ Arabic text:
 
         try:
             if self.provider == "gemini":
+                logger.info(f"Translating text to {target_language} using Gemini")
                 response = self.gemini_model.generate_content(prompt)
+
+                # Check if response has text
+                if not response or not hasattr(response, 'text'):
+                    logger.error(f"Gemini response has no text. Response: {response}")
+                    if hasattr(response, 'candidates'):
+                        logger.error(f"Candidates: {response.candidates}")
+                    raise Exception(f"Gemini response has no text. Response: {response}")
+
+                # Check for safety blocks or other issues
+                if hasattr(response, 'prompt_feedback'):
+                    feedback = response.prompt_feedback
+                    if hasattr(feedback, 'block_reason') and feedback.block_reason > 0:
+                        logger.error(f"Content blocked by Gemini: {feedback.block_reason}")
+                        raise Exception(f"Content blocked by Gemini: {feedback.block_reason}")
+
+                logger.info(f"Translation successful")
                 return response.text.strip()
             elif self.provider == "openai":
-                response = self.openai_client.chat.completions.create(
-                    model=os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4.1"),
-                    messages=[{
+                model = os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4.1")
+
+                # Prepare request parameters
+                request_params = {
+                    "model": model,
+                    "messages": [{
                         "role": "user",
                         "content": prompt
                     }]
-                )
+                }
+
+                # Add GPT-5 specific parameters
+                if model.startswith(('gpt-5', 'gpt-5-mini')):
+                    request_params["reasoning"] = {"effort": "low"}
+                    request_params["text"] = {"verbosity": "low"}
+
+                response = self.openai_client.chat.completions.create(**request_params)
                 return response.choices[0].message.content.strip()
         except Exception as e:
-            raise Exception(f"Translation failed: {str(e)}")
+            logger.error(f"Translation failed with {self.provider}: {str(e)}", exc_info=True)
+            raise Exception(f"Translation failed with {self.provider}: {str(e)}")
 
     async def translate_from_image(
         self,
@@ -144,6 +175,7 @@ Translate to {target_lang_name}:
 """
 
             if self.provider == "gemini":
+                logger.info(f"Translating from image to {target_language} using Gemini")
                 # Download image from URL
                 response = requests.get(image_url)
                 response.raise_for_status()
@@ -153,12 +185,31 @@ Translate to {target_lang_name}:
 
                 # Generate content with image
                 response = self.gemini_model.generate_content([prompt, image])
+
+                # Check if response has text
+                if not response or not hasattr(response, 'text'):
+                    logger.error(f"Gemini response has no text. Response: {response}")
+                    if hasattr(response, 'candidates'):
+                        logger.error(f"Candidates: {response.candidates}")
+                    raise Exception(f"Gemini response has no text. Response: {response}")
+
+                # Check for safety blocks or other issues
+                if hasattr(response, 'prompt_feedback'):
+                    feedback = response.prompt_feedback
+                    if hasattr(feedback, 'block_reason') and feedback.block_reason > 0:
+                        logger.error(f"Content blocked by Gemini: {feedback.block_reason}")
+                        raise Exception(f"Content blocked by Gemini: {feedback.block_reason}")
+
+                logger.info(f"Image translation successful")
                 return response.text.strip()
 
             elif self.provider == "openai":
-                response = self.openai_client.chat.completions.create(
-                    model=os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4.1"),
-                    messages=[{
+                model = os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4.1")
+
+                # Prepare request parameters
+                request_params = {
+                    "model": model,
+                    "messages": [{
                         "role": "user",
                         "content": [
                             {"type": "text", "text": prompt},
@@ -170,10 +221,18 @@ Translate to {target_lang_name}:
                             },
                         ],
                     }]
-                )
+                }
+
+                # Add GPT-5 specific parameters
+                if model.startswith(('gpt-5', 'gpt-5-mini')):
+                    request_params["reasoning"] = {"effort": "low"}
+                    request_params["text"] = {"verbosity": "low"}
+
+                response = self.openai_client.chat.completions.create(**request_params)
                 return response.choices[0].message.content.strip()
 
         except Exception as e:
-            raise Exception(f"Image translation failed: {str(e)}")
+            logger.error(f"Image translation failed with {self.provider}: {str(e)}", exc_info=True)
+            raise Exception(f"Image translation failed with {self.provider}: {str(e)}")
 
 translation_service = TranslationService()

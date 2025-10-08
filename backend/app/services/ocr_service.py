@@ -84,9 +84,10 @@ class OCRService:
 
         model_name = os.getenv("OPENAI_OCR_MODEL", "gpt-4o-mini")
 
-        response = self.openai_client.chat.completions.create(
-            model=model_name,
-            messages=[
+        # Prepare request parameters
+        request_params = {
+            "model": model_name,
+            "messages": [
                 {
                     "role": "user",
                     "content": [
@@ -99,9 +100,16 @@ class OCRService:
                         }
                     ]
                 }
-            ],
-            max_tokens=4000
-        )
+            ]
+        }
+
+        # Add model-specific parameters
+        if model_name.startswith(('gpt-5', 'gpt-5-mini')):
+            request_params["max_completion_tokens"] = 4000
+        else:
+            request_params["max_tokens"] = 4000
+
+        response = self.openai_client.chat.completions.create(**request_params)
 
         return response.choices[0].message.content.strip()
 
